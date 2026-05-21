@@ -483,4 +483,8 @@ function saveGameData() {
 }
 
 // Start application
-document.addEventListener("DOMContentLoaded", init);
+if (document.readyState === 'loading') {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
