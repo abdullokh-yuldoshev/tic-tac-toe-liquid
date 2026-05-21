@@ -297,7 +297,23 @@ button, .chip, .tab, .cell, select, input {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   filter: drop-shadow(0 4px 16px var(--accent-glow));
-  line-height: 1.05;
+  line-height: 1.1;
+}
+
+/* "Alex Edition" sub-brand line */
+.heroEdition {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--accent-grad);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s linear infinite;
+  opacity: 0.85;
+  margin-top: 2px;
 }
 
 .heroSubtitle {

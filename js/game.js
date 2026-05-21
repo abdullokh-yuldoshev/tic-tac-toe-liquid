@@ -485,7 +485,10 @@ const I18N = {
     play: "Игра идёт", win: "Победа!", draw: "Ничья",
     confirmTitle: "Подтверждение",
     confirmExit:  "Выйти в меню?", confirmNew: "Начать заново?",
-    ok: "Да", cancel: "Нет"
+    ok: "Да", cancel: "Нет",
+    infoTitle: "Об авторе",
+    infoBtnClose: "Закрыть",
+    infoHtml: "Создатель игры: <strong>Абдуллох Юлдошев (Alex)</strong><br><br><a href='https://abdullokhyuldoshev.taplink.ws/' target='_blank' class='btn btnPrimary' style='display:inline-flex; width:auto; padding:10px 20px; font-size:15px; text-decoration:none; margin-top:8px;'>👉 Открыть Taplink</a>"
   },
   en: {
     home: "Home", settings: "Settings", start: "Start", save: "Save",
@@ -504,7 +507,10 @@ const I18N = {
     play: "Playing", win: "Winner!", draw: "Draw",
     confirmTitle: "Confirm",
     confirmExit:  "Exit to menu?", confirmNew: "Restart game?",
-    ok: "Yes", cancel: "No"
+    ok: "Yes", cancel: "No",
+    infoTitle: "About Author",
+    infoBtnClose: "Close",
+    infoHtml: "Game creator: <strong>Abdullokh Yuldoshev (Alex)</strong><br><br><a href='https://abdullokhyuldoshev.taplink.ws/' target='_blank' class='btn btnPrimary' style='display:inline-flex; width:auto; padding:10px 20px; font-size:15px; text-decoration:none; margin-top:8px;'>👉 Open Taplink</a>"
   },
   uz: {
     home: "Bosh sahifa", settings: "Sozlamalar", start: "Boshlash", save: "Saqlash",
@@ -523,7 +529,10 @@ const I18N = {
     play: "O'yin", win: "G'alaba!", draw: "Durang",
     confirmTitle: "Tasdiqlash",
     confirmExit:  "Chiqasizmi?", confirmNew: "Qayta boshlash?",
-    ok: "Ha", cancel: "Yo'q"
+    ok: "Ha", cancel: "Yo'q",
+    infoTitle: "Muallif haqida",
+    infoBtnClose: "Yopish",
+    infoHtml: "O'yin yaratuvchisi: <strong>Abdullokh Yuldoshev (Alex)</strong><br><br><a href='https://abdullokhyuldoshev.taplink.ws/' target='_blank' class='btn btnPrimary' style='display:inline-flex; width:auto; padding:10px 20px; font-size:15px; text-decoration:none; margin-top:8px;'>👉 Taplink ochish</a>"
   }
 };
 
@@ -597,6 +606,23 @@ function init() {
   $("tabSettings").onclick  = () => { Sfx.click(settings.sound); go("settings"); };
   $("tabHome2").onclick     = () => { Sfx.click(settings.sound); go("home"); };
   $("tabSettings2").onclick = () => { Sfx.click(settings.sound); go("settings"); };
+
+  $("btnInfo").onclick = () => {
+    Sfx.click(settings.sound);
+    const t = I18N[settings.lang];
+    $("modalTitle").textContent    = t.infoTitle;
+    $("modalText").innerHTML       = t.infoHtml;
+    $("modalCancel").style.display = "none";
+    $("modalOk").textContent       = t.infoBtnClose;
+    $("modalBack").classList.add("on");
+    $("modalOk").onclick = () => {
+      Sfx.click(settings.sound);
+      $("modalBack").classList.remove("on");
+      // Restore Cancel visibility for future confirm dialogs
+      $("modalCancel").style.display = "";
+    };
+    $("modalCancel").onclick = null;
+  };
 
   $("btnSave").onclick = () => { Sfx.click(settings.sound); Haptic.trigger('medium'); saveAndApply(); };
 
