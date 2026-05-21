@@ -175,7 +175,9 @@ function defaultSettings() {
     sym3:  "△",
     sym4:  "□",
     gamesPlayed: 0,
-    gamesWon: 0
+    gamesWon: 0,
+    pveLevel: 1,
+    pveXp: 0
   };
 }
 
@@ -486,6 +488,8 @@ const I18N = {
     playersLabel: "Имена игроков",
     lblCustomSym: "Символы игроков (Эмодзи)",
     statsTitle: "Статистика", statsTotal: "Всего:", statsWins: "Побед:", statsWinrate: "Винрейт:",
+    careerTitle: "Уровень Карьеры", careerXp: "Опыт:",
+    btnAbout: "ℹ Об авторе",
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Игрока", mode4: "4 Игрока",
     exit: "Выйти", undo: "Отмена", restart: "Заново",
     turn:  (n)  => `Ход: ${n}`,
@@ -510,6 +514,8 @@ const I18N = {
     playersLabel: "Player Names",
     lblCustomSym: "Player Symbols (Emoji)",
     statsTitle: "Statistics", statsTotal: "Total:", statsWins: "Wins:", statsWinrate: "Win Rate:",
+    careerTitle: "Career Level", careerXp: "XP:",
+    btnAbout: "ℹ About Author",
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Players", mode4: "4 Players",
     exit: "Exit", undo: "Undo", restart: "Restart",
     turn:  (n)  => `Turn: ${n}`,
@@ -534,6 +540,8 @@ const I18N = {
     playersLabel: "O'yinchilar",
     lblCustomSym: "O'yinchi belgilari (Emoji)",
     statsTitle: "Statistika", statsTotal: "Jami:", statsWins: "G'alaba:", statsWinrate: "Yutuq:",
+    careerTitle: "Karera darajasi", careerXp: "Tajriba:",
+    btnAbout: "ℹ Muallif haqida",
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Kishi", mode4: "4 Kishi",
     exit: "Chiqish", undo: "Bekor", restart: "Qayta",
     turn:  (n)  => `Navbat: ${n}`,
@@ -643,7 +651,16 @@ function init() {
     saveSettings(settings);
   };
 
-  $("selLang").onchange  = () => { settings.lang  = $("selLang").value;  renderUI(); syncSettingsForm(); };
+  // Language selectors
+  document.querySelectorAll(".btn-lang").forEach(btn => {
+    btn.onclick = () => {
+      Sfx.click(settings.sound);
+      settings.lang = btn.getAttribute("data-lang");
+      saveSettings(settings);
+      renderUI();
+      syncSettingsForm();
+    };
+  });
   $("selTheme").onchange = () => { settings.theme = $("selTheme").value; applyTheme(); };
   $("selSize").onchange  = rebuildGoalSelect;
 
@@ -741,8 +758,6 @@ function renderHomeMeta() {
    SETTINGS FORM SYNC
    ───────────────────────────────────────────────────── */
 function syncSettingsForm() {
-  $("selLang").value = settings.lang;
-
   const t = I18N[settings.lang];
 
   // Theme selector — rebuild with translated labels
@@ -835,7 +850,6 @@ function rebuildGoalSelect() {
    SAVE & APPLY SETTINGS
    ───────────────────────────────────────────────────── */
 function saveAndApply() {
-  settings.lang  = $("selLang").value;
   settings.theme = $("selTheme").value;
 
   const chips = $("modeChips").children;
@@ -1000,6 +1014,19 @@ function checkWinCondition() {
     settings.gamesPlayed = (settings.gamesPlayed || 0) + 1;
     if (board[winLine[0]] === "X") {
       settings.gamesWon = (settings.gamesWon || 0) + 1;
+      
+      // PvE Progress
+      if (settings.mode === "ai") {
+        settings.pveXp = (settings.pveXp || 0) + 20;
+        if (settings.pveXp >= 100) {
+          settings.pveLevel = (settings.pveLevel || 1) + 1;
+          settings.pveXp = 0;
+          setTimeout(() => {
+            showToast("Level Up! New Level: " + settings.pveLevel);
+            Confetti.start();
+          }, 800);
+        }
+      }
     }
     saveSettings(settings);
     
@@ -1041,6 +1068,21 @@ function updateStatsUI() {
   $("statWinrate").textContent = `${t.statsWinrate} ${winrate}%`;
 }
 
+function updateCareerUI() {
+  const t = I18N[settings.lang];
+  const lblTitle = $("lblCareerTitle");
+  const lblXp = $("lblCareerXp");
+  const fill = $("careerProgressFill");
+  if (!lblTitle || !lblXp || !fill) return;
+
+  const lvl = settings.pveLevel || 1;
+  const xp = settings.pveXp || 0;
+  
+  lblTitle.textContent = `${t.careerTitle}: ${lvl}`;
+  lblXp.textContent = `${t.careerXp} ${xp}/100`;
+  fill.style.width = `${xp}%`;
+}
+
 /* ─────────────────────────────────────────────────────
    UI RENDER
    ───────────────────────────────────────────────────── */
@@ -1048,10 +1090,12 @@ function renderUI() {
   const t = I18N[settings.lang];
 
   $("btnStart").innerHTML        = "▶ " + t.start;
+  const btnInfo = $("btnInfo");
+  if (btnInfo && t.btnAbout) btnInfo.textContent = t.btnAbout;
+  
   $("tabHome").textContent       = t.home;
   $("tabSettings").textContent   = t.settings;
   $("settingsTitle").textContent = t.settings;
-  $("lblLang").textContent       = t.lang;
   $("lblTheme").textContent      = t.theme;
   $("lblMode").textContent       = t.mode;
   $("lblSize").textContent       = t.size;
@@ -1062,6 +1106,15 @@ function renderUI() {
   $("lblSound").textContent      = t.sound;
 
   updateStatsUI();
+  updateCareerUI();
+
+  document.querySelectorAll(".btn-lang").forEach(btn => {
+    if (btn.getAttribute("data-lang") === settings.lang) {
+      btn.style.background = "rgba(255,255,255,0.3)";
+    } else {
+      btn.style.background = "rgba(255,255,255,0.1)";
+    }
+  });
 
   $("soundStatusText").textContent = settings.sound ? t.soundOn : t.soundOff;
   $("soundIcon").innerHTML         = settings.sound ? iconSpk : iconSpkOff;
