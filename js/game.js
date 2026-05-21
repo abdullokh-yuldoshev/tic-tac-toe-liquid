@@ -481,6 +481,7 @@ const I18N = {
     applied: "Настройки применены",
     lang: "Язык", theme: "Тема",
     themeLight: "Светлая", themeDark: "Тёмная", themeGold: "Золотая",
+    thLight: "Светлая", thDark: "Тёмная", thGold: "Золотая",
     sound: "Звук", soundOn: "Включен", soundOff: "Выключен",
     mode: "Режим", size: "Размер поля", goal: "Цель (в ряд)", ai: "Сложность ИИ",
     aiEasy: "Лёгкая (Ошибается)", aiNormal: "Нормальная", aiHard: "Сложная", aiExpert: "Непобедимый",
@@ -507,6 +508,7 @@ const I18N = {
     applied: "Applied",
     lang: "Language", theme: "Theme",
     themeLight: "Light", themeDark: "Dark", themeGold: "Gold",
+    thLight: "Light", thDark: "Dark", thGold: "Gold",
     sound: "Sound", soundOn: "On", soundOff: "Off",
     mode: "Mode", size: "Size", goal: "Goal", ai: "AI Level",
     aiEasy: "Easy (Mistakes)", aiNormal: "Normal", aiHard: "Hard", aiExpert: "Unbeatable",
@@ -533,6 +535,7 @@ const I18N = {
     applied: "Saqlandi",
     lang: "Til", theme: "Mavzu",
     themeLight: "Yorug'", themeDark: "Qorong'i", themeGold: "Oltin",
+    thLight: "Yorug'", thDark: "Tungi", thGold: "Oltin",
     sound: "Ovoz", soundOn: "Yonilgan", soundOff: "O'chirilgan",
     mode: "Rejim", size: "O'lcham", goal: "Maqsad", ai: "AI Darajasi",
     aiEasy: "Oson (Xato qiladi)", aiNormal: "O'rta", aiHard: "Qiyin", aiExpert: "Yengilmas",
@@ -646,10 +649,28 @@ function init() {
 
   $("btnSoundToggle").onclick = () => {
     settings.sound = !settings.sound;
-    Sfx.click(settings.sound);
-    renderUI();
+    if (settings.sound) Sfx.click(true);
     saveSettings(settings);
+    renderUI();
   };
+
+  // Theme dropdown
+  $("btnThemeToggle").onclick = (e) => {
+    Sfx.click(settings.sound);
+    $("themeMenu").classList.toggle("hidden");
+    e.stopPropagation();
+  };
+
+  document.querySelectorAll(".btn-theme-item").forEach(btn => {
+    btn.onclick = () => {
+      Sfx.click(settings.sound);
+      settings.theme = btn.getAttribute("data-theme");
+      saveSettings(settings);
+      $("themeMenu").classList.add("hidden");
+      applyTheme();
+      renderUI();
+    };
+  });
 
   // Language dropdown
   $("btnLangToggle").onclick = (e) => {
@@ -657,9 +678,12 @@ function init() {
     $("langMenu").classList.toggle("hidden");
     e.stopPropagation();
   };
+
   document.addEventListener("click", () => { 
     const lm = $("langMenu");
+    const tm = $("themeMenu");
     if (lm) lm.classList.add("hidden"); 
+    if (tm) tm.classList.add("hidden");
   });
 
   document.querySelectorAll(".btn-lang-item").forEach(btn => {
@@ -672,7 +696,6 @@ function init() {
       syncSettingsForm();
     };
   });
-  $("selTheme").onchange = () => { settings.theme = $("selTheme").value; applyTheme(); };
   $("selSize").onchange  = rebuildGoalSelect;
 
   $("btnExit").onclick = async () => {
@@ -861,8 +884,6 @@ function rebuildGoalSelect() {
    SAVE & APPLY SETTINGS
    ───────────────────────────────────────────────────── */
 function saveAndApply() {
-  settings.theme = $("selTheme").value;
-
   const chips = $("modeChips").children;
   for (let i = 0; i < chips.length; i++) {
     if (chips[i].classList.contains("chipOn")) settings.mode = MODES[i].id;
@@ -1107,26 +1128,35 @@ function renderUI() {
   $("tabHome").textContent       = t.home;
   $("tabSettings").textContent   = t.settings;
   $("settingsTitle").textContent = t.settings;
-  $("lblTheme").textContent      = t.theme;
   $("lblMode").textContent       = t.mode;
   $("lblSize").textContent       = t.size;
   $("lblGoal").textContent       = t.goal;
   $("lblAI").textContent         = t.ai;
   $("lblNames").textContent      = t.playersLabel;
   $("lblCustomSym").textContent  = t.lblCustomSym;
-  $("lblSound").textContent      = t.sound;
 
   updateStatsUI();
   updateCareerUI();
 
   const flagMap = { "ru": "🇷🇺", "en": "🇺🇸", "uz": "🇺🇿" };
-  const toggleBtn = $("btnLangToggle");
-  if (toggleBtn) {
-    toggleBtn.textContent = flagMap[settings.lang] || "🇷🇺";
+  const langToggleBtn = $("btnLangToggle");
+  if (langToggleBtn) langToggleBtn.textContent = flagMap[settings.lang] || "🇷🇺";
+
+  const themeIconMap = { "light": "☀️", "dark": "🌙", "gold": "👑" };
+  const themeToggleBtn = $("btnThemeToggle");
+  if (themeToggleBtn) themeToggleBtn.textContent = themeIconMap[settings.theme] || "☀️";
+
+  const btnSoundToggle = $("btnSoundToggle");
+  if (btnSoundToggle) {
+    btnSoundToggle.textContent = settings.sound ? "🔊" : "🔇";
   }
 
-  $("soundStatusText").textContent = settings.sound ? t.soundOn : t.soundOff;
-  $("soundIcon").innerHTML         = settings.sound ? iconSpk : iconSpkOff;
+  const txtL = document.querySelector(".theme-txt-light");
+  if (txtL) txtL.textContent = t.thLight;
+  const txtD = document.querySelector(".theme-txt-dark");
+  if (txtD) txtD.textContent = t.thDark;
+  const txtG = document.querySelector(".theme-txt-gold");
+  if (txtG) txtG.textContent = t.thGold;
 
   $("inpP1").placeholder = t.p1;
   $("inpP2").placeholder = t.p2;

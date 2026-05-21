@@ -8,7 +8,7 @@
   <meta http-equiv="Expires" content="0" />
   <meta name="description" content="Tic-Tac-Toe Liquid Premium — ультра-премиальная игра с дизайном Liquid Glass, Gold-темой и поддержкой Telegram WebApp." />
   <title>Tic-Tac-Toe – Alex Edition</title>
-  <link rel="stylesheet" href="css/style.css?v=3.5.4">
+  <link rel="stylesheet" href="css/style.css?v=3.5.5">
 </head>
 
 <body>
@@ -20,15 +20,28 @@
       <!-- SCREEN: HOME -->
       <div id="screenHome" class="center-col">
         <div class="glass-panel hero">
-          <div class="lang-dropdown-wrap" style="position: absolute; top: 12px; right: 12px; z-index: 110;">
-             <button id="btnLangToggle" type="button" style="background: rgba(255,255,255,0.12); border: 1px solid var(--glass-border); border-radius: 50%; width: 34px; height: 34px; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--glass-shadow); transition: transform 0.2s;">
-               🇷🇺
-             </button>
-             <div id="langMenu" class="glass-panel hidden" style="position: absolute; top: 40px; right: 0; padding: 6px; display: flex; flex-direction: column; gap: 4px; min-width: 50px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); z-index: 120;">
-               <button class="btn-lang-item" data-lang="ru" style="background: transparent; border: none; font-size: 20px; padding: 6px; cursor: pointer; transition: transform 0.15s;">🇷🇺</button>
-               <button class="btn-lang-item" data-lang="en" style="background: transparent; border: none; font-size: 20px; padding: 6px; cursor: pointer; transition: transform 0.15s;">🇺🇸</button>
-               <button class="btn-lang-item" data-lang="uz" style="background: transparent; border: none; font-size: 20px; padding: 6px; cursor: pointer; transition: transform 0.15s;">🇺🇿</button>
+          <div class="top-controls-panel" style="position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; z-index: 110;">
+             
+             <button id="btnSoundToggle" type="button" style="background: rgba(255,255,255,0.12); border: 1px solid var(--glass-border); border-radius: 50%; width: 34px; height: 34px; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--glass-shadow); transition: transform 0.2s;">🔊</button>
+
+             <div class="dropdown-wrap" style="position: relative;">
+               <button id="btnThemeToggle" type="button" style="background: rgba(255,255,255,0.12); border: 1px solid var(--glass-border); border-radius: 50%; width: 34px; height: 34px; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--glass-shadow); transition: transform 0.2s;">☀️</button>
+               <div id="themeMenu" class="glass-panel hidden" style="position: absolute; top: 40px; right: 0; padding: 6px; display: flex; flex-direction: column; gap: 4px; min-width: 120px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); z-index: 120;">
+                 <button class="btn-theme-item" data-theme="light" style="background: transparent; border: none; font-size: 13px; color: var(--text); padding: 6px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px; font-weight: 500;"><span style="font-size:16px;">☀️</span> <span class="theme-txt-light">Светлая</span></button>
+                 <button class="btn-theme-item" data-theme="dark" style="background: transparent; border: none; font-size: 13px; color: var(--text); padding: 6px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px; font-weight: 500;"><span style="font-size:16px;">🌙</span> <span class="theme-txt-dark">Тёмная</span></button>
+                 <button class="btn-theme-item" data-theme="gold" style="background: transparent; border: none; font-size: 13px; color: var(--text); padding: 6px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px; font-weight: 500;"><span style="font-size:16px;">👑</span> <span class="theme-txt-gold">Золотая</span></button>
+               </div>
              </div>
+
+             <div class="dropdown-wrap" style="position: relative;">
+               <button id="btnLangToggle" type="button" style="background: rgba(255,255,255,0.12); border: 1px solid var(--glass-border); border-radius: 50%; width: 34px; height: 34px; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--glass-shadow); transition: transform 0.2s;">🇷🇺</button>
+               <div id="langMenu" class="glass-panel hidden" style="position: absolute; top: 40px; right: 0; padding: 6px; display: flex; flex-direction: column; gap: 4px; min-width: 120px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); z-index: 120;">
+                 <button class="btn-lang-item" data-lang="ru" style="background: transparent; border: none; font-size: 13px; color: var(--text); padding: 6px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px; font-weight: 500;"><span style="font-size:18px;">🇷🇺</span> Русский</button>
+                 <button class="btn-lang-item" data-lang="en" style="background: transparent; border: none; font-size: 13px; color: var(--text); padding: 6px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px; font-weight: 500;"><span style="font-size:18px;">🇺🇸</span> English</button>
+                 <button class="btn-lang-item" data-lang="uz" style="background: transparent; border: none; font-size: 13px; color: var(--text); padding: 6px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px; font-weight: 500;"><span style="font-size:18px;">🇺🇿</span> O'zbek</button>
+               </div>
+             </div>
+
           </div>
           <div class="heroEmoji">✦</div>
           <div class="heroTitle">Tic-Tac-Toe<br><span class="heroEdition">Alex Edition</span></div>
@@ -71,24 +84,7 @@
             </div>
           </div>
 
-          <div class="grid2">
-            <div class="field">
-              <div class="label" id="lblTheme">Тема</div>
-              <select id="selTheme">
-                <option value="light">Светлая</option>
-                <option value="dark">Тёмная</option>
-                <option value="gold">Золотая</option>
-              </select>
-            </div>
-          </div>
 
-          <div class="field">
-            <div class="label" id="lblSound">Звук</div>
-            <button id="btnSoundToggle" class="btn btnSec soundToggle" type="button">
-              <span id="soundStatusText">Включен</span>
-              <span id="soundIcon" class="icon-wrap"></span>
-            </button>
-          </div>
 
           <div class="field">
             <div class="label" id="lblMode">Режим игры</div>
@@ -191,6 +187,6 @@
   <!-- TOAST -->
   <div class="toast" id="toast">Сохранено</div>
 
-  <script type="module" src="js/game.js?v=3.5.4"></script>
+  <script type="module" src="js/game.js?v=3.5.5"></script>
 </body>
 </html>
