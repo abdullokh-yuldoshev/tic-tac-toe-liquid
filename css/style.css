@@ -1,5 +1,5 @@
 /* =====================================================
-   TIC-TAC-TOE LIQUID PREMIUM — css/style.css v3.1.0
+   TIC-TAC-TOE LIQUID PREMIUM — css/style.css v3.2.0
    Design System: Liquid Glass 3.0 + Gold Theme
    ===================================================== */
 
@@ -125,10 +125,15 @@
 /* ─── RESET & BASE ───────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body, .app {
-  height: auto !important;
+html, body {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+/* .app gets auto height so it stretches with content but scrolls if needed */
+.app {
   min-height: 100vh;
-  overflow-y: auto !important;
+  overflow-y: auto;
   overflow-x: hidden;
 }
 
@@ -157,11 +162,12 @@ button, .chip, .tab, .cell, select, input {
 /* ─── APP SHELL ──────────────────────────────────────── */
 .app {
   width: 100%;
+  /* Ideal: content perfectly centred vertically & horizontally */
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  /* Extra top padding for Dynamic Island / Telegram header */
-  padding: calc(var(--safeTop) + 40px) 16px calc(var(--safeBottom) + 30px) !important;
+  /* Balanced padding — respects Dynamic Island / Telegram header */
+  padding: calc(var(--safeTop) + 20px) 16px calc(var(--safeBottom) + 20px) !important;
   position: relative;
   z-index: 10;
 }
@@ -179,8 +185,11 @@ button, .chip, .tab, .cell, select, input {
 /* ─── STAGE ──────────────────────────────────────────── */
 .stage {
   width: min(460px, 100%);
+  /* Stack all center-col screens in the same grid cell */
   display: grid;
   grid-template-areas: "screen";
+  /* Centre inner screens; falls back gracefully to scroll on small displays */
+  place-items: center;
   gap: 20px;
   position: relative;
   z-index: 1;

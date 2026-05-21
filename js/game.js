@@ -237,56 +237,230 @@ function checkWinSimple(b, sz, goal) {
   return checkWinFull(b, sz, goal).win;
 }
 
+/* ─────────────────────────────────────────────────────
+   AI ENGINE v2 — TACTICAL BRAIN
+   Priority chain:
+     1. Win immediately
+     2. Block opponent win
+     3. Create a Fork (two winning threats at once)
+     4. Block opponent Fork
+     5. Strategic position (center → corners → edges)
+   Level Expert on 3×3: Minimax with alpha-beta pruning
+   ───────────────────────────────────────────────────── */
+
 /**
- * Find best strategic move for AI
+ * Count open winning lines that pass through a cell.
+ * Used to score strategic positions.
  */
-function findBestMove(board, empties, cfg, meSymbol, enemySymbol) {
-  const sz = cfg.size;
-  const gl = cfg.goal;
+function countOpenLines(b, sz, goal, sym) {
+  const dirs  = [[1,0],[0,1],[1,1],[1,-1]];
+  let threats = 0;
 
-  // 1. Win if possible
-  for (const i of empties) {
-    board[i] = meSymbol;
-    if (checkWinSimple(board, sz, gl)) { board[i] = ""; return i; }
-    board[i] = "";
+  for (let r = 0; r < sz; r++) {
+    for (let c = 0; c < sz; c++) {
+      for (const d of dirs) {
+        // check if a full line of `goal` starting here is unblocked for `sym`
+        let ours    = 0;
+        let blocked = false;
+        for (let k = 0; k < goal; k++) {
+          const nr = r + d[0]*k, nc = c + d[1]*k;
+          if (nr < 0 || nr >= sz || nc < 0 || nc >= sz) { blocked = true; break; }
+          const v = b[nr*sz + nc];
+          if (v && v !== sym) { blocked = true; break; }
+          if (v === sym) ours++;
+        }
+        if (!blocked) threats += ours;
+      }
+    }
   }
-
-  // 2. Block opponent win
-  for (const i of empties) {
-    board[i] = enemySymbol;
-    if (checkWinSimple(board, sz, gl)) { board[i] = ""; return i; }
-    board[i] = "";
-  }
-
-  // 3. Prefer center proximity
-  const center = (sz - 1) / 2;
-  const sorted = [...empties].sort((a, b) => {
-    const ra = Math.floor(a / sz), ca = a % sz;
-    const rb = Math.floor(b / sz), cb = b % sz;
-    const da = Math.abs(ra - center) + Math.abs(ca - center);
-    const db = Math.abs(rb - center) + Math.abs(cb - center);
-    return da - db;
-  });
-
-  return sorted[0];
+  return threats;
 }
 
 /**
- * Returns the bot's chosen cell index
+ * Count how many winning moves (forks) a symbol can create from position `idx`.
+ * A fork = after placing sym at idx, there are >= 2 distinct winning threats.
+ */
+function countWinningThreats(b, sz, goal, idx, sym) {
+  if (b[idx]) return 0;
+  b[idx] = sym;
+
+  const dirs  = [[1,0],[0,1],[1,1],[1,-1]];
+  const winLines = new Set();
+
+  // find every (goal-1)-in-a-row that needs one more cell
+  const empties = b.map((v,i) => v === '' ? i : -1).filter(i => i !== -1);
+  for (const e of empties) {
+    if (e === idx) continue;
+    b[e] = sym;
+    if (checkWinSimple(b, sz, goal)) {
+      // encode the winning line's direction as a string key to avoid double-counting
+      for (const d of dirs) {
+        for (let r = 0; r < sz; r++) {
+          for (let c = 0; c < sz; c++) {
+            const line = [];
+            for (let k = 0; k < goal; k++) {
+              const nr = r + d[0]*k, nc = c + d[1]*k;
+              if (nr < 0 || nr >= sz || nc < 0 || nc >= sz) break;
+              if (b[nr*sz+nc] === sym) line.push(nr*sz+nc);
+              else break;
+            }
+            if (line.length === goal && line.includes(e)) {
+              winLines.add(line.sort().join(','));
+            }
+          }
+        }
+      }
+    }
+    b[e] = '';
+  }
+
+  b[idx] = '';
+  return winLines.size;
+}
+
+/**
+ * Minimax with alpha-beta pruning — only used for Expert on 3x3
+ */
+function minimax(b, sz, goal, depth, isMax, alpha, beta, meSymbol, enemySymbol, maxDepth) {
+  const res = checkWinFull(b, sz, goal);
+  if (res.win) {
+    // whoever just moved won
+    const winner = b[res.line[0]];
+    return winner === meSymbol ? (100 - depth) : -(100 - depth);
+  }
+
+  const empties = b.map((v,i) => v === '' ? i : -1).filter(i => i !== -1);
+  if (!empties.length || depth >= maxDepth) return 0;
+
+  if (isMax) {
+    let best = -Infinity;
+    for (const i of empties) {
+      b[i] = meSymbol;
+      const score = minimax(b, sz, goal, depth+1, false, alpha, beta, meSymbol, enemySymbol, maxDepth);
+      b[i] = '';
+      best  = Math.max(best, score);
+      alpha = Math.max(alpha, best);
+      if (beta <= alpha) break; // prune
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const i of empties) {
+      b[i] = enemySymbol;
+      const score = minimax(b, sz, goal, depth+1, true, alpha, beta, meSymbol, enemySymbol, maxDepth);
+      b[i] = '';
+      best = Math.min(best, score);
+      beta = Math.min(beta, best);
+      if (beta <= alpha) break; // prune
+    }
+    return best;
+  }
+}
+
+/**
+ * Tactical AI: returns best move index.
+ * level: 'easy' | 'normal' | 'hard' | 'expert'
+ */
+function findBestMove(board, empties, cfg, meSymbol, enemySymbol) {
+  const sz   = cfg.size;
+  const gl   = cfg.goal;
+  const is3x3Expert = (sz === 3 && gl === 3 && cfg.ai === 'expert');
+
+  /* ── STEP 1: Win immediately ── */
+  for (const i of empties) {
+    board[i] = meSymbol;
+    const win = checkWinSimple(board, sz, gl);
+    board[i] = '';
+    if (win) return i;
+  }
+
+  /* ── STEP 2: Block opponent immediate win ── */
+  for (const i of empties) {
+    board[i] = enemySymbol;
+    const win = checkWinSimple(board, sz, gl);
+    board[i] = '';
+    if (win) return i;
+  }
+
+  /* ── Expert 3×3: full Minimax ── */
+  if (is3x3Expert) {
+    let bestScore = -Infinity;
+    let bestMove  = empties[0];
+    for (const i of empties) {
+      board[i] = meSymbol;
+      const score = minimax(board, sz, gl, 0, false, -Infinity, Infinity, meSymbol, enemySymbol, 9);
+      board[i] = '';
+      if (score > bestScore) { bestScore = score; bestMove = i; }
+    }
+    return bestMove;
+  }
+
+  /* ── STEP 3 (Hard+): Create a Fork — two threats at once ── */
+  if (cfg.ai === 'hard' || cfg.ai === 'expert') {
+    for (const i of empties) {
+      if (countWinningThreats(board, sz, gl, i, meSymbol) >= 2) return i;
+    }
+
+    /* ── STEP 4: Block opponent Fork ── */
+    for (const i of empties) {
+      if (countWinningThreats(board, sz, gl, i, enemySymbol) >= 2) return i;
+    }
+  }
+
+  /* ── STEP 5: Strategic position scoring ── */
+  const center = Math.floor(sz / 2);
+
+  // Score each empty cell
+  const scored = empties.map(i => {
+    const r = Math.floor(i / sz), c = i % sz;
+    let score = 0;
+
+    // Center is highest priority
+    if (r === center && c === center) score += 50;
+
+    // Corners
+    const isCorner = (r === 0 || r === sz-1) && (c === 0 || c === sz-1);
+    if (isCorner) score += 20;
+
+    // Edges (non-corner)
+    const isEdge = (r === 0 || r === sz-1 || c === 0 || c === sz-1) && !isCorner;
+    if (isEdge) score += 5;
+
+    // Count open lines our symbol contributes to
+    board[i] = meSymbol;
+    score += countOpenLines(board, sz, gl, meSymbol) * 2;
+    board[i] = '';
+
+    // Small perturbation to break perfect ties stochastically
+    score += Math.random() * 0.5;
+
+    return { i, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0].i;
+}
+
+/**
+ * Returns the bot's chosen cell index.
+ * Applies mistake probability for easy/normal; full tactics for hard/expert.
  */
 function getBotMove(board, cfg, symbols) {
-  const empties = board.map((v, i) => v === "" ? i : -1).filter(i => i !== -1);
+  const empties = board.map((v, i) => v === '' ? i : -1).filter(i => i !== -1);
   if (!empties.length) return -1;
 
+  // Mistake probability by difficulty
   let mistakeChance = 0;
-  if (cfg.ai === "easy")   mistakeChance = 0.70;
-  if (cfg.ai === "normal") mistakeChance = 0.30;
-  if (cfg.ai === "hard")   mistakeChance = 0.10;
+  if (cfg.ai === 'easy')   mistakeChance = 0.75; // very dumb
+  if (cfg.ai === 'normal') mistakeChance = 0.35; // occasional errors
+  if (cfg.ai === 'hard')   mistakeChance = 0.08; // rare slip
+  // expert: 0 — always uses tactics / minimax
 
   if (Math.random() < mistakeChance) {
     // deliberate random mistake
     return empties[Math.floor(Math.random() * empties.length)];
   }
+
   return findBestMove(board, empties, cfg, symbols[1], symbols[0]);
 }
 
