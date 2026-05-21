@@ -651,12 +651,23 @@ function init() {
     saveSettings(settings);
   };
 
-  // Language selectors
-  document.querySelectorAll(".btn-lang").forEach(btn => {
+  // Language dropdown
+  $("btnLangToggle").onclick = (e) => {
+    Sfx.click(settings.sound);
+    $("langMenu").classList.toggle("hidden");
+    e.stopPropagation();
+  };
+  document.addEventListener("click", () => { 
+    const lm = $("langMenu");
+    if (lm) lm.classList.add("hidden"); 
+  });
+
+  document.querySelectorAll(".btn-lang-item").forEach(btn => {
     btn.onclick = () => {
       Sfx.click(settings.sound);
       settings.lang = btn.getAttribute("data-lang");
       saveSettings(settings);
+      $("langMenu").classList.add("hidden");
       renderUI();
       syncSettingsForm();
     };
@@ -1108,13 +1119,11 @@ function renderUI() {
   updateStatsUI();
   updateCareerUI();
 
-  document.querySelectorAll(".btn-lang").forEach(btn => {
-    if (btn.getAttribute("data-lang") === settings.lang) {
-      btn.style.background = "rgba(255,255,255,0.3)";
-    } else {
-      btn.style.background = "rgba(255,255,255,0.1)";
-    }
-  });
+  const flagMap = { "ru": "🇷🇺", "en": "🇺🇸", "uz": "🇺🇿" };
+  const toggleBtn = $("btnLangToggle");
+  if (toggleBtn) {
+    toggleBtn.textContent = flagMap[settings.lang] || "🇷🇺";
+  }
 
   $("soundStatusText").textContent = settings.sound ? t.soundOn : t.soundOff;
   $("soundIcon").innerHTML         = settings.sound ? iconSpk : iconSpkOff;
