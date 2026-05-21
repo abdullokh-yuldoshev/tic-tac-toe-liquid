@@ -604,8 +604,6 @@ function init() {
 
   $("tabHome").onclick      = () => { Sfx.click(settings.sound); go("home"); };
   $("tabSettings").onclick  = () => { Sfx.click(settings.sound); go("settings"); };
-  $("tabHome2").onclick     = () => { Sfx.click(settings.sound); go("home"); };
-  $("tabSettings2").onclick = () => { Sfx.click(settings.sound); go("settings"); };
 
   $("btnInfo").onclick = () => {
     Sfx.click(settings.sound);
@@ -679,32 +677,33 @@ function go(scr) {
   screenSettings.classList.add("hidden");
   screenGame.classList.add("hidden");
 
-  ["tabHome", "tabSettings", "tabHome2", "tabSettings2"].forEach(id => {
-    $(id).classList.remove("tabOn");
+  ["tabHome", "tabSettings"].forEach(id => {
+    const el = $(id);
+    if(el) el.classList.remove("tabOn");
   });
+
+  const tabbarGlobal = $("tabbarGlobal");
+  if (tabbarGlobal) tabbarGlobal.classList.remove("hidden");
 
   if (scr === "home") {
     screenHome.classList.remove("hidden");
     $("tabHome").classList.add("tabOn");
-    $("tabHome2").classList.add("tabOn");
     
-    // Move indicators
-    moveTabIndicator("tabHome", "tabIndicator1");
-    moveTabIndicator("tabHome2", "tabIndicator2");
+    // Move indicator
+    setTimeout(() => moveTabIndicator("tabHome", "tabIndicator"), 0);
     
     renderHomeMeta();
   } else if (scr === "settings") {
     screenSettings.classList.remove("hidden");
     $("tabSettings").classList.add("tabOn");
-    $("tabSettings2").classList.add("tabOn");
     
-    // Move indicators
-    moveTabIndicator("tabSettings", "tabIndicator1");
-    moveTabIndicator("tabSettings2", "tabIndicator2");
+    // Move indicator
+    setTimeout(() => moveTabIndicator("tabSettings", "tabIndicator"), 0);
     
     syncSettingsForm();
   } else if (scr === "game") {
     screenGame.classList.remove("hidden");
+    if (tabbarGlobal) tabbarGlobal.classList.add("hidden");
   }
 }
 
@@ -996,8 +995,6 @@ function renderUI() {
   $("btnStart").innerHTML        = "▶ " + t.start;
   $("tabHome").textContent       = t.home;
   $("tabSettings").textContent   = t.settings;
-  $("tabHome2").textContent      = t.home;
-  $("tabSettings2").textContent  = t.settings;
   $("settingsTitle").textContent = t.settings;
   $("lblLang").textContent       = t.lang;
   $("lblTheme").textContent      = t.theme;
