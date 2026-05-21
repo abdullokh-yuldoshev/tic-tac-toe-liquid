@@ -794,16 +794,7 @@ function renderHomeMeta() {
 function syncSettingsForm() {
   const t = I18N[settings.lang];
 
-  // Theme selector — rebuild with translated labels
-  const selTheme = $("selTheme");
-  selTheme.innerHTML = "";
-  THEMES.forEach(th => {
-    const opt = document.createElement("option");
-    opt.value       = th.id;
-    opt.textContent = t[th.key]; // ru: "Золотая", en: "Gold", uz: "Oltin"
-    selTheme.appendChild(opt);
-  });
-  selTheme.value = settings.theme;
+
 
   // Mode chips
   const chipsDiv = $("modeChips");
@@ -815,8 +806,13 @@ function syncSettingsForm() {
     b.onclick = () => {
       Sfx.click(settings.sound);
       Haptic.trigger('light');
+      
+      // Update visual state immediately
+      Array.from(chipsDiv.children).forEach(c => c.classList.remove("chipOn"));
+      b.classList.add("chipOn");
+      
       settings.mode = m.id;
-      syncSettingsForm();
+      saveAndApply();
     };
     chipsDiv.appendChild(b);
   });
@@ -833,6 +829,7 @@ function syncSettingsForm() {
   }
   selSize.value = settings.size;
   rebuildGoalSelect();
+  $("selGoal").value = settings.goal;
 
   // AI level selector
   const selAI = $("selAI");
@@ -889,8 +886,8 @@ function saveAndApply() {
     if (chips[i].classList.contains("chipOn")) settings.mode = MODES[i].id;
   }
 
-  settings.size = parseInt($("selSize").value);
-  settings.goal = parseInt($("selGoal").value);
+  settings.size = parseInt($("selSize").value) || 3;
+  settings.goal = parseInt($("selGoal").value) || 3;
   settings.ai   = $("selAI").value;
 
   settings.p1 = $("inpP1").value.trim() || "Player 1";
