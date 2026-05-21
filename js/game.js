@@ -92,9 +92,8 @@ const iconSpkOff = `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-
 
 // DOM Elements
 const $ = id => document.getElementById(id);
-const screenHome = $("screenHome");
-const screenSettings = $("screenSettings");
-const screenGame = $("screenGame");
+const screenSettings = $("settings-screen");
+const screenGame = $("game-container");
 
 // State
 let settings = loadSettings();
@@ -109,13 +108,10 @@ function init() {
   renderUI();
   
   // Event Listeners
-  $("btnStart").onclick = () => { Sfx.click(settings.sound); Haptic.trigger('light'); startNewGame(); };
-  $("tabHome").onclick = () => { Sfx.click(settings.sound); go("home"); };
-  $("tabSettings").onclick = () => { Sfx.click(settings.sound); go("settings"); };
-  $("tabHome2").onclick = () => { Sfx.click(settings.sound); go("home"); };
-  $("tabSettings2").onclick = () => { Sfx.click(settings.sound); go("settings"); };
+  if($("tabMain")) $("tabMain").onclick = () => { Sfx.click(settings.sound); go("game"); };
+  if($("tabSettings")) $("tabSettings").onclick = () => { Sfx.click(settings.sound); go("settings"); };
   
-  $("btnSave").onclick = () => { Sfx.click(settings.sound); Haptic.trigger('medium'); saveAndApply(); };
+  if($("btnSave")) $("btnSave").onclick = () => { Sfx.click(settings.sound); Haptic.trigger('medium'); saveAndApply(); };
   
   $("btnSoundToggle").onclick = () => {
      settings.sound = !settings.sound;
@@ -124,11 +120,9 @@ function init() {
      saveSettings(settings);
   };
   
-  $("selLang").onchange = () => { settings.lang = $("selLang").value; renderUI(); syncSettingsForm(); };
-  $("selTheme").onchange = () => { settings.theme = $("selTheme").value; applyTheme(); };
-  $("selSize").onchange = rebuildGoalSelect;
+  if($("selTheme")) $("selTheme").onchange = () => { settings.theme = $("selTheme").value; applyTheme(); };
   
-  $("btnExit").onclick = async () => {
+  if($("btnExit")) $("btnExit").onclick = async () => {
     Sfx.click(settings.sound);
     if(await modalConfirm(I18N[settings.lang].confirmExit)) {
       board = []; gameOver = false; 
@@ -137,12 +131,12 @@ function init() {
     }
   };
   
-  $("btnRestart").onclick = async () => {
+  if($("btnReset")) $("btnReset").onclick = async () => {
      Sfx.click(settings.sound);
      if(await modalConfirm(I18N[settings.lang].confirmNew)) startNewGame();
   };
   
-  $("btnUndo").onclick = () => {
+  if($("btnUndo")) $("btnUndo").onclick = () => {
     Sfx.click(settings.sound); Haptic.trigger('light');
     doUndo();
   };
@@ -160,39 +154,28 @@ function init() {
 }
 
 function go(scr) {
-  screenHome.classList.add("hidden");
-  screenSettings.classList.add("hidden");
-  screenGame.classList.add("hidden");
+  if (screenGame) screenGame.style.display = "none";
+  if (screenSettings) screenSettings.style.display = "none";
   
-  ["tabHome", "tabSettings", "tabHome2", "tabSettings2"].forEach(id => {
-    $(id).classList.remove("tabOn");
-  });
+  if($("tabMain")) $("tabMain").classList.remove("active");
+  if($("tabSettings")) $("tabSettings").classList.remove("active");
 
-  if (scr === "home") {
-     screenHome.classList.remove("hidden");
-     $("tabHome").classList.add("tabOn");
-     $("tabHome2").classList.add("tabOn");
-     renderHomeMeta();
+  if (scr === "home" || scr === "game") {
+     if(screenGame) screenGame.style.display = "block";
+     if($("tabMain")) $("tabMain").classList.add("active");
   } else if (scr === "settings") {
-     screenSettings.classList.remove("hidden");
-     $("tabSettings").classList.add("tabOn");
-     $("tabSettings2").classList.add("tabOn");
+     if(screenSettings) screenSettings.style.display = "block";
+     if($("tabSettings")) $("tabSettings").classList.add("active");
      syncSettingsForm();
-  } else if (scr === "game") {
-     screenGame.classList.remove("hidden");
   }
 }
 
 function renderHomeMeta() {
-  const t = I18N[settings.lang];
-  const m = MODES.find(x => x.id === settings.mode);
-  $("homeMeta").textContent = `${t[m.key]} • ${settings.size}x${settings.size}`;
+  // No home meta in new layout
 }
 
 function syncSettingsForm() {
-  $("selLang").value = settings.lang;
-  
-  const t = I18N[settings.lang];
+  const t = I18N[settings.lang] || I18N.ru;
 
   const selTheme = $("selTheme");
   selTheme.innerHTML = "";
@@ -330,19 +313,23 @@ function renderGame() {
   const curP = history.length % getPlayersCount();
   const pName = getPlayerName(curP);
   
-  if (gameOver) {
-     if (winLine.length) {
-        $("turnTitle").textContent = t.win + " " + getPlayerName(SYMBOLS.indexOf(board[winLine[0]]));
-     } else {
-        $("turnTitle").textContent = t.draw;
-     }
-  } else {
-     $("turnTitle").textContent = t.turn(pName, SYMBOLS[curP]);
+  const turnEl = $("status") || $("turnTitle");
+  if (turnEl) {
+    if (gameOver) {
+       if (winLine.length) {
+          turnEl.textContent = t.win + " " + getPlayerName(SYMBOLS.indexOf(board[winLine[0]]));
+       } else {
+          turnEl.textContent = t.draw;
+       }
+    } else {
+       turnEl.textContent = t.turn(pName, SYMBOLS[curP]);
+    }
   }
-  $("turnSub").textContent = t.sub(settings.size, settings.goal);
   
-  $("btnUndo").disabled = (history.length === 0 || gameOver);
-  $("btnUndo").style.opacity = $("btnUndo").disabled ? 0.5 : 1;
+  if($("btnUndo")) {
+    $("btnUndo").disabled = (history.length === 0 || gameOver);
+    $("btnUndo").style.opacity = $("btnUndo").disabled ? 0.5 : 1;
+  }
 }
 
 function makeMove(idx) {
@@ -483,4 +470,4 @@ function saveGameData() {
 }
 
 // Start application
-init();
+document.addEventListener("DOMContentLoaded", init);
