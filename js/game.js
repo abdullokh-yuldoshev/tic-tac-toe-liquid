@@ -171,7 +171,11 @@ function defaultSettings() {
     p4:    "Игрок 4",
     sound: true,
     sym1:  "X",
-    sym2:  "O"
+    sym2:  "O",
+    sym3:  "△",
+    sym4:  "□",
+    gamesPlayed: 0,
+    gamesWon: 0
   };
 }
 
@@ -481,6 +485,7 @@ const I18N = {
     p1: "Игрок 1", p2: "Игрок 2", p3: "Игрок 3", p4: "Игрок 4",
     playersLabel: "Имена игроков",
     lblCustomSym: "Символы игроков (Эмодзи)",
+    statsTitle: "Статистика", statsTotal: "Всего:", statsWins: "Побед:", statsWinrate: "Винрейт:",
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Игрока", mode4: "4 Игрока",
     exit: "Выйти", undo: "Отмена", restart: "Заново",
     turn:  (n)  => `Ход: ${n}`,
@@ -504,6 +509,7 @@ const I18N = {
     p1: "Player 1", p2: "Player 2", p3: "Player 3", p4: "Player 4",
     playersLabel: "Player Names",
     lblCustomSym: "Player Symbols (Emoji)",
+    statsTitle: "Statistics", statsTotal: "Total:", statsWins: "Wins:", statsWinrate: "Win Rate:",
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Players", mode4: "4 Players",
     exit: "Exit", undo: "Undo", restart: "Restart",
     turn:  (n)  => `Turn: ${n}`,
@@ -527,6 +533,7 @@ const I18N = {
     p1: "1-o'yinchi", p2: "2-o'yinchi", p3: "3-o'yinchi", p4: "4-o'yinchi",
     playersLabel: "O'yinchilar",
     lblCustomSym: "O'yinchi belgilari (Emoji)",
+    statsTitle: "Statistika", statsTotal: "Jami:", statsWins: "G'alaba:", statsWinrate: "Yutuq:",
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Kishi", mode4: "4 Kishi",
     exit: "Chiqish", undo: "Bekor", restart: "Qayta",
     turn:  (n)  => `Navbat: ${n}`,
@@ -799,6 +806,10 @@ function syncSettingsForm() {
 
   $("inpSym1").value = settings.sym1;
   $("inpSym2").value = settings.sym2;
+  $("inpSym3").value = settings.sym3;
+  $("inpSym4").value = settings.sym4;
+
+  updateStatsUI();
 }
 
 /* ─────────────────────────────────────────────────────
@@ -841,8 +852,10 @@ function saveAndApply() {
   settings.p3 = $("inpP3").value.trim() || "Player 3";
   settings.p4 = $("inpP4").value.trim() || "Player 4";
 
-  settings.sym1 = $("inpSym1").value.trim() || "X";
-  settings.sym2 = $("inpSym2").value.trim() || "O";
+  settings.sym1 = Array.from($("inpSym1").value.trim())[0] || "X";
+  settings.sym2 = Array.from($("inpSym2").value.trim())[0] || "O";
+  settings.sym3 = Array.from($("inpSym3").value.trim())[0] || "△";
+  settings.sym4 = Array.from($("inpSym4").value.trim())[0] || "□";
 
   saveSettings(settings);
   applyTheme();
@@ -890,6 +903,8 @@ function renderGame() {
       let displayVal = val;
       if (val === "X") displayVal = settings.sym1;
       else if (val === "O") displayVal = settings.sym2;
+      else if (val === "△") displayVal = settings.sym3;
+      else if (val === "□") displayVal = settings.sym4;
       
       sp.className   = "sym sym" + val;
       sp.textContent = displayVal;
@@ -981,8 +996,17 @@ function checkWinCondition() {
     Sfx.win(settings.sound);
     Haptic.trigger('heavy');
     Confetti.start();
+    
+    settings.gamesPlayed = (settings.gamesPlayed || 0) + 1;
+    if (board[winLine[0]] === "X") {
+      settings.gamesWon = (settings.gamesWon || 0) + 1;
+    }
+    saveSettings(settings);
+    
   } else if (history.length === settings.size * settings.size) {
     gameOver = true;
+    settings.gamesPlayed = (settings.gamesPlayed || 0) + 1;
+    saveSettings(settings);
   }
 }
 
@@ -999,6 +1023,22 @@ function getPlayerName(idx) {
   if (idx === 2) return settings.p3;
   if (idx === 3) return settings.p4;
   return "Player";
+}
+
+function updateStatsUI() {
+  const t = I18N[settings.lang];
+  const lblStatsTitle = $("lblStatsTitle");
+  if (!lblStatsTitle) return;
+  
+  lblStatsTitle.textContent = t.statsTitle;
+  
+  const played = settings.gamesPlayed || 0;
+  const won = settings.gamesWon || 0;
+  const winrate = played > 0 ? Math.round((won / played) * 100) : 0;
+  
+  $("statTotal").textContent = `${t.statsTotal} ${played}`;
+  $("statWins").textContent = `${t.statsWins} ${won}`;
+  $("statWinrate").textContent = `${t.statsWinrate} ${winrate}%`;
 }
 
 /* ─────────────────────────────────────────────────────
@@ -1020,6 +1060,8 @@ function renderUI() {
   $("lblNames").textContent      = t.playersLabel;
   $("lblCustomSym").textContent  = t.lblCustomSym;
   $("lblSound").textContent      = t.sound;
+
+  updateStatsUI();
 
   $("soundStatusText").textContent = settings.sound ? t.soundOn : t.soundOff;
   $("soundIcon").innerHTML         = settings.sound ? iconSpk : iconSpkOff;
