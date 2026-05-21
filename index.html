@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <title>Tic-Tac-Toe Liquid Premium</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+  <canvas id="confettiCanvas"></canvas>
+
+  <div class="app">
+    <div class="stage">
+    
+      <div id="screenHome" class="center-col">
+        <div class="glass-panel hero">
+          <div class="heroTitle">Tic-Tac-Toe</div>
+          <div id="subtitle" style="font-size:18px; font-weight:300; opacity:0.7; margin-top:4px;">Liquid Edition</div>
+          <div class="heroMeta" id="homeMeta">...</div>
+          
+          <div style="margin-top: 32px;">
+            <button id="btnStart" class="btn btnPrimary" type="button">
+              ▶ Начать игру
+            </button>
+          </div>
+        </div>
+
+        <div class="tabbar-wrap">
+          <div class="tabbar">
+            <button id="tabHome" class="tab tabOn">Главная</button>
+            <button id="tabSettings" class="tab">Настройки</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="screenSettings" class="center-col hidden">
+        <div class="glass-panel">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <div style="font-size:24px; font-weight:800;" id="settingsTitle">Настройки</div>
+          </div>
+
+          <div class="grid2">
+            <div class="field">
+              <div class="label" id="lblLang">Язык</div>
+              <select id="selLang">
+                <option value="ru">Русский</option>
+                <option value="en">English</option>
+                <option value="uz">O‘zbek</option>
+              </select>
+            </div>
+            <div class="field">
+              <div class="label" id="lblTheme">Тема</div>
+              <select id="selTheme"></select>
+            </div>
+          </div>
+
+          <div class="field">
+             <div class="label" id="lblSound">Звук</div>
+             <button id="btnSoundToggle" class="btn btnSec" style="justify-content: space-between; width:100%;">
+                <span id="soundStatusText">Включен</span>
+                <span id="soundIcon" class="icon-wrap"></span>
+             </button>
+          </div>
+
+          <div class="field">
+            <div class="label" id="lblMode">Режим игры</div>
+            <div class="chips" id="modeChips"></div>
+          </div>
+
+          <div class="grid2">
+            <div class="field">
+              <div class="label" id="lblSize">Поле</div>
+              <select id="selSize"></select>
+            </div>
+            <div class="field">
+              <div class="label" id="lblGoal">Цель (в ряд)</div>
+              <select id="selGoal"></select>
+            </div>
+          </div>
+          
+          <div class="field" id="aiRow">
+             <div class="label" id="lblAI">Сложность ИИ</div>
+             <select id="selAI"></select>
+          </div>
+
+          <div style="margin-top:10px; border-top:1px solid rgba(120,120,128,0.1); padding-top:16px;">
+            <div class="label" id="lblNames">Имена игроков</div>
+            <div class="grid2">
+               <input id="inpP1" maxlength="10" placeholder="Игрок 1" />
+               <input id="inpP2" maxlength="10" placeholder="Игрок 2" />
+            </div>
+            <div class="grid2" id="nameGrid34" style="display:none; margin-top:12px;">
+               <input id="inpP3" maxlength="10" placeholder="Игрок 3" />
+               <input id="inpP4" maxlength="10" placeholder="Игрок 4" />
+            </div>
+          </div>
+
+          <div style="margin-top: 24px;">
+            <button id="btnSave" class="btn btnPrimary" style="width:100%">Сохранить настройки</button>
+          </div>
+        </div>
+        
+        <div class="tabbar-wrap">
+          <div class="tabbar">
+            <button id="tabHome2" class="tab">Главная</button>
+            <button id="tabSettings2" class="tab tabOn">Настройки</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="screenGame" class="center-col hidden">
+        <div class="glass-panel">
+          <div class="gameTop">
+            <div>
+              <div class="turnTitle" id="turnTitle">Ходит X</div>
+              <div class="status" id="turnSub">...</div>
+            </div>
+            <button class="btn btnSec" id="btnExit" style="padding: 8px 16px; font-size:14px;">Выйти</button>
+          </div>
+
+          <div class="board-frame">
+            <div class="board" id="board"></div>
+          </div>
+
+          <div style="display:flex; gap:12px; margin-top:20px;">
+            <button class="btn btnSec" id="btnUndo" style="flex:1;">↩ Отмена</button>
+            <button class="btn btnSec" id="btnRestart" style="flex:1;">⟲ Заново</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modalBack" id="modalBack">
+    <div class="modal">
+      <div class="modalTitle" id="modalTitle">...</div>
+      <div class="modalText" id="modalText">...</div>
+      <div class="modalBtns">
+        <button class="btnModal btnCancel" id="modalCancel">Отмена</button>
+        <button class="btnModal btnOk" id="modalOk">ОК</button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="toast" id="toast">Сохранено</div>
+
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>
