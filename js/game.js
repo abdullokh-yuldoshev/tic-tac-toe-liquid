@@ -9,7 +9,7 @@ const I18N = {
     home:"Главная", settings:"Настройки", start:"Начать игру", save:"Сохранить",
     applied:"Настройки применены",
     lang:"Язык", theme:"Тема", 
-    themeLight:"Светлая", themeDark:"Тёмная",
+    themeLight:"Светлая", themeDark:"Тёмная", themeGold:"Золотая",
     sound:"Звук", soundOn:"Включен", soundOff:"Выключен",
     mode:"Режим", size:"Размер поля", goal:"Цель (в ряд)", ai:"Сложность ИИ",
     aiEasy:"Лёгкая (Ошибается)", aiNormal:"Нормальная", aiHard:"Сложная", aiExpert:"Непобедимый",
@@ -28,7 +28,7 @@ const I18N = {
     home:"Home", settings:"Settings", start:"Start", save:"Save",
     applied:"Applied",
     lang:"Language", theme:"Theme", 
-    themeLight:"Light", themeDark:"Dark",
+    themeLight:"Light", themeDark:"Dark", themeGold:"Gold",
     sound:"Sound", soundOn:"On", soundOff:"Off",
     mode:"Mode", size:"Size", goal:"Goal", ai:"AI Level",
     aiEasy:"Easy (Mistakes)", aiNormal:"Normal", aiHard:"Hard", aiExpert:"Unbeatable",
@@ -47,7 +47,7 @@ const I18N = {
     home:"Bosh sahifa", settings:"Sozlamalar", start:"Boshlash", save:"Saqlash",
     applied:"Saqlandi",
     lang:"Til", theme:"Mavzu", 
-    themeLight:"Yorug‘", themeDark:"Qorong‘i",
+    themeLight:"Yorug‘", themeDark:"Qorong‘i", themeGold:"Oltin",
     sound:"Ovoz", soundOn:"Yonilgan", soundOff:"O‘chirilgan",
     mode:"Rejim", size:"O‘lcham", goal:"Maqsad", ai:"AI Darajasi",
     aiEasy:"Oson (Xato qiladi)", aiNormal:"O‘rta", aiHard:"Qiyin", aiExpert:"Yengilmas",
@@ -80,7 +80,8 @@ const AI_LEVELS = [
 
 const THEMES = [
   {id:"light", key:"themeLight"},
-  {id:"dark", key:"themeDark"}
+  {id:"dark", key:"themeDark"},
+  {id:"gold", key:"themeGold"}
 ];
 
 const SYMBOLS = ["X","O","△","□"];
