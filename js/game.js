@@ -169,7 +169,9 @@ function defaultSettings() {
     p2:    "Игрок 2",
     p3:    "Игрок 3",
     p4:    "Игрок 4",
-    sound: true
+    sound: true,
+    sym1:  "X",
+    sym2:  "O"
   };
 }
 
@@ -478,6 +480,7 @@ const I18N = {
     aiEasy: "Лёгкая (Ошибается)", aiNormal: "Нормальная", aiHard: "Сложная", aiExpert: "Непобедимый",
     p1: "Игрок 1", p2: "Игрок 2", p3: "Игрок 3", p4: "Игрок 4",
     playersLabel: "Имена игроков",
+    lblCustomSym: "Символы игроков (Эмодзи)",
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Игрока", mode4: "4 Игрока",
     exit: "Выйти", undo: "Отмена", restart: "Заново",
     turn:  (n)  => `Ход: ${n}`,
@@ -500,6 +503,7 @@ const I18N = {
     aiEasy: "Easy (Mistakes)", aiNormal: "Normal", aiHard: "Hard", aiExpert: "Unbeatable",
     p1: "Player 1", p2: "Player 2", p3: "Player 3", p4: "Player 4",
     playersLabel: "Player Names",
+    lblCustomSym: "Player Symbols (Emoji)",
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Players", mode4: "4 Players",
     exit: "Exit", undo: "Undo", restart: "Restart",
     turn:  (n)  => `Turn: ${n}`,
@@ -522,6 +526,7 @@ const I18N = {
     aiEasy: "Oson (Xato qiladi)", aiNormal: "O'rta", aiHard: "Qiyin", aiExpert: "Yengilmas",
     p1: "1-o'yinchi", p2: "2-o'yinchi", p3: "3-o'yinchi", p4: "4-o'yinchi",
     playersLabel: "O'yinchilar",
+    lblCustomSym: "O'yinchi belgilari (Emoji)",
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Kishi", mode4: "4 Kishi",
     exit: "Chiqish", undo: "Bekor", restart: "Qayta",
     turn:  (n)  => `Navbat: ${n}`,
@@ -791,6 +796,9 @@ function syncSettingsForm() {
   $("inpP3").value = settings.p3;
   $("inpP4").value = settings.p4;
   $("nameGrid34").style.display = (settings.mode === "p3" || settings.mode === "p4") ? "grid" : "none";
+
+  $("inpSym1").value = settings.sym1;
+  $("inpSym2").value = settings.sym2;
 }
 
 /* ─────────────────────────────────────────────────────
@@ -832,6 +840,9 @@ function saveAndApply() {
   settings.p2 = $("inpP2").value.trim() || "Player 2";
   settings.p3 = $("inpP3").value.trim() || "Player 3";
   settings.p4 = $("inpP4").value.trim() || "Player 4";
+
+  settings.sym1 = $("inpSym1").value.trim() || "X";
+  settings.sym2 = $("inpSym2").value.trim() || "O";
 
   saveSettings(settings);
   applyTheme();
@@ -876,8 +887,12 @@ function renderGame() {
 
     if (val) {
       const sp = document.createElement("span");
+      let displayVal = val;
+      if (val === "X") displayVal = settings.sym1;
+      else if (val === "O") displayVal = settings.sym2;
+      
       sp.className   = "sym sym" + val;
-      sp.textContent = val;
+      sp.textContent = displayVal;
       c.appendChild(sp);
     }
 
@@ -1003,6 +1018,7 @@ function renderUI() {
   $("lblGoal").textContent       = t.goal;
   $("lblAI").textContent         = t.ai;
   $("lblNames").textContent      = t.playersLabel;
+  $("lblCustomSym").textContent  = t.lblCustomSym;
   $("lblSound").textContent      = t.sound;
 
   $("soundStatusText").textContent = settings.sound ? t.soundOn : t.soundOff;
