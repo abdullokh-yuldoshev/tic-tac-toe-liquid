@@ -687,15 +687,34 @@ function go(scr) {
     screenHome.classList.remove("hidden");
     $("tabHome").classList.add("tabOn");
     $("tabHome2").classList.add("tabOn");
+    
+    // Move indicators
+    moveTabIndicator("tabHome", "tabIndicator1");
+    moveTabIndicator("tabHome2", "tabIndicator2");
+    
     renderHomeMeta();
   } else if (scr === "settings") {
     screenSettings.classList.remove("hidden");
     $("tabSettings").classList.add("tabOn");
     $("tabSettings2").classList.add("tabOn");
+    
+    // Move indicators
+    moveTabIndicator("tabSettings", "tabIndicator1");
+    moveTabIndicator("tabSettings2", "tabIndicator2");
+    
     syncSettingsForm();
   } else if (scr === "game") {
     screenGame.classList.remove("hidden");
   }
+}
+
+function moveTabIndicator(btnId, indId) {
+  const btn = $(btnId);
+  const ind = $(indId);
+  if (!btn || !ind) return;
+  
+  ind.style.left = btn.offsetLeft + "px";
+  ind.style.width = btn.offsetWidth + "px";
 }
 
 /* ─────────────────────────────────────────────────────

@@ -421,11 +421,25 @@ button, .chip, .tab, .cell, select, input {
   gap: 4px;
   box-shadow: var(--glass-shadow);
   border: 1px solid var(--glass-border);
+  position: relative;
 }
+
+.tabbar-indicator {
+  position: absolute;
+  top: 4px;
+  height: calc(100% - 8px);
+  border-radius: 99px;
+  background: var(--text);
+  z-index: 1;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+[data-theme="dark"] .tabbar-indicator { background: #ffffff; }
+[data-theme="gold"] .tabbar-indicator { background: var(--accent-grad); }
 
 .tab {
   border: none;
-  background: transparent;
+  background: transparent !important;
   padding: 10px 22px;
   border-radius: 99px;
   font-weight: 600;
@@ -433,24 +447,22 @@ button, .chip, .tab, .cell, select, input {
   font-family: inherit;
   color: var(--text-sec);
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  z-index: 2;
+  position: relative;
+  transition: color 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .tab:active {
   transform: scale(0.92);
   transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .tab.tabOn {
-  background: var(--text);
   color: #fff;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  box-shadow: none;
 }
 
 /* Dark & Gold: invert active tab */
-[data-theme="dark"] .tab.tabOn { background: #ffffff; color: #000000; }
-[data-theme="gold"] .tab.tabOn {
-  background: var(--accent-grad);
-  color: #1a0e00;
-}
+[data-theme="dark"] .tab.tabOn { color: #000000; }
+[data-theme="gold"] .tab.tabOn { color: #1a0e00; }
 
 /* ─── FORMS ──────────────────────────────────────────── */
 .grid2 {
