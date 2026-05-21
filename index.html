@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="description" content="Tic-Tac-Toe Liquid Premium — ультра-премиальная игра с дизайном Liquid Glass, Gold-темой и поддержкой Telegram WebApp." />
+  <title>Tic-Tac-Toe Liquid Premium</title>
+  <link rel="stylesheet" href="css/style.css?v=3.1.0">
+</head>
+
+<body>
+  <canvas id="confettiCanvas"></canvas>
+
+  <div class="app">
+    <div class="stage">
+
+      <!-- SCREEN: HOME -->
+      <div id="screenHome" class="center-col">
+        <div class="glass-panel hero">
+          <div class="heroEmoji">✦</div>
+          <div class="heroTitle">Tic-Tac-Toe</div>
+          <div id="subtitle" class="heroSubtitle">Liquid Premium</div>
+          <div class="heroMeta" id="homeMeta">...</div>
+
+          <div class="heroActions">
+            <button id="btnStart" class="btn btnPrimary" type="button">
+              ▶ Начать игру
+            </button>
+          </div>
+        </div>
+
+        <div class="tabbar-wrap">
+          <div class="tabbar">
+            <button id="tabHome" class="tab tabOn" type="button">Главная</button>
+            <button id="tabSettings" class="tab" type="button">Настройки</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCREEN: SETTINGS -->
+      <div id="screenSettings" class="center-col hidden">
+        <div class="glass-panel">
+          <div class="panelHeader">
+            <div class="panelTitle" id="settingsTitle">Настройки</div>
+          </div>
+
+          <div class="grid2">
+            <div class="field">
+              <div class="label" id="lblLang">Язык</div>
+              <select id="selLang">
+                <option value="ru">Русский</option>
+                <option value="en">English</option>
+                <option value="uz">O'zbek</option>
+              </select>
+            </div>
+            <div class="field">
+              <div class="label" id="lblTheme">Тема</div>
+              <select id="selTheme">
+                <option value="light">Светлая</option>
+                <option value="dark">Тёмная</option>
+                <option value="gold">Золотая</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="label" id="lblSound">Звук</div>
+            <button id="btnSoundToggle" class="btn btnSec soundToggle" type="button">
+              <span id="soundStatusText">Включен</span>
+              <span id="soundIcon" class="icon-wrap"></span>
+            </button>
+          </div>
+
+          <div class="field">
+            <div class="label" id="lblMode">Режим игры</div>
+            <div class="chips" id="modeChips"></div>
+          </div>
+
+          <div class="grid2">
+            <div class="field">
+              <div class="label" id="lblSize">Поле</div>
+              <select id="selSize"></select>
+            </div>
+            <div class="field">
+              <div class="label" id="lblGoal">Цель (в ряд)</div>
+              <select id="selGoal"></select>
+            </div>
+          </div>
+
+          <div class="field" id="aiRow">
+            <div class="label" id="lblAI">Сложность ИИ</div>
+            <select id="selAI"></select>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="field">
+            <div class="label" id="lblNames">Имена игроков</div>
+            <div class="grid2">
+              <input id="inpP1" maxlength="10" placeholder="Игрок 1" />
+              <input id="inpP2" maxlength="10" placeholder="Игрок 2" />
+            </div>
+            <div class="grid2 mt12" id="nameGrid34" style="display:none;">
+              <input id="inpP3" maxlength="10" placeholder="Игрок 3" />
+              <input id="inpP4" maxlength="10" placeholder="Игрок 4" />
+            </div>
+          </div>
+
+          <div class="saveWrap">
+            <button id="btnSave" class="btn btnPrimary" style="width:100%" type="button">Сохранить настройки</button>
+          </div>
+        </div>
+
+        <div class="tabbar-wrap">
+          <div class="tabbar">
+            <button id="tabHome2" class="tab" type="button">Главная</button>
+            <button id="tabSettings2" class="tab tabOn" type="button">Настройки</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCREEN: GAME -->
+      <div id="screenGame" class="center-col hidden">
+        <div class="glass-panel">
+          <div class="gameTop">
+            <div class="gameTopInfo">
+              <div class="turnTitle" id="turnTitle">Ходит X</div>
+              <div class="status" id="turnSub">...</div>
+            </div>
+            <button class="btn btnSec btnExit" id="btnExit" type="button">Выйти</button>
+          </div>
+
+          <div class="board-frame">
+            <div class="board" id="board"></div>
+          </div>
+
+          <div class="gameActions">
+            <button class="btn btnSec" id="btnUndo" type="button">↩ Отмена</button>
+            <button class="btn btnSec" id="btnRestart" type="button">⟲ Заново</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL -->
+  <div class="modalBack" id="modalBack">
+    <div class="modal">
+      <div class="modalTitle" id="modalTitle">...</div>
+      <div class="modalText" id="modalText">...</div>
+      <div class="modalBtns">
+        <button class="btnModal btnCancel" id="modalCancel" type="button">Отмена</button>
+        <button class="btnModal btnOk" id="modalOk" type="button">ОК</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast">Сохранено</div>
+
+  <script type="module" src="js/game.js?v=3.1.0"></script>
+</body>
+</html>
