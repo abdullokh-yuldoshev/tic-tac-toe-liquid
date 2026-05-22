@@ -654,18 +654,7 @@ function init() {
     renderUI();
   };
 
-  // Mode Bottom Sheet Trigger
-  $("triggerMode").onclick = () => {
-    Sfx.click(settings.sound);
-    $("sheetOverlay").classList.add("on");
-    $("modeSheet").classList.add("on");
-  };
-
-  $("sheetOverlay").onclick = () => {
-    Sfx.click(settings.sound);
-    $("sheetOverlay").classList.remove("on");
-    $("modeSheet").classList.remove("on");
-  };
+  $("selMode").onchange = () => { settings.mode = $("selMode").value; saveAndApply(); };
 
   // Theme dropdown
   $("btnThemeToggle").onclick = (e) => {
@@ -749,10 +738,6 @@ function init() {
    NAVIGATION
    ───────────────────────────────────────────────────── */
 function go(scr) {
-  const sheet = $("modeSheet");
-  const overlay = $("sheetOverlay");
-  if (sheet) sheet.classList.remove("on");
-  if (overlay) overlay.classList.remove("on");
 
   screenHome.classList.add("hidden");
   screenSettings.classList.add("hidden");
@@ -814,42 +799,15 @@ function syncSettingsForm() {
 
 
 
-  // Mode Bottom Sheet Options
-  const modeOptions = $("modeOptions");
-  const currentModeText = $("currentModeText");
-  const modeIcons = { "pvp": "👥", "ai": "🤖", "p3": "🤺", "p4": "⚔️" };
-  
-  if (modeOptions) {
-    modeOptions.innerHTML = "";
-    MODES.forEach(m => {
-      const isSel = settings.mode === m.id;
-      if (isSel && currentModeText) {
-        currentModeText.textContent = t[m.key];
-      }
-      
-      const b = document.createElement("div");
-      b.style.display = "flex";
-      b.style.alignItems = "center";
-      b.style.gap = "12px";
-      b.style.padding = "16px";
-      b.style.background = isSel ? "rgba(255,255,255,0.15)" : "transparent";
-      b.style.borderRadius = "16px";
-      b.style.border = isSel ? "1px solid rgba(255,255,255,0.3)" : "1px solid transparent";
-      b.style.cursor = "pointer";
-      b.style.transition = "all 0.2s";
-      b.innerHTML = `<span style="font-size: 24px;">${modeIcons[m.id] || "🎮"}</span> <span style="font-size: 16px; font-weight: 500;">${t[m.key]}</span>`;
-      
-      b.onclick = () => {
-        Sfx.click(settings.sound);
-        Haptic.trigger('medium');
-        settings.mode = m.id;
-        $("sheetOverlay").classList.remove("on");
-        $("modeSheet").classList.remove("on");
-        saveAndApply();
-      };
-      modeOptions.appendChild(b);
-    });
-  }
+  const selMode = $("selMode");
+  selMode.innerHTML = "";
+  MODES.forEach(m => {
+    const opt = document.createElement("option");
+    opt.value = m.id;
+    opt.textContent = t[m.key];
+    selMode.appendChild(opt);
+  });
+  selMode.value = settings.mode;
 
   // Size selector
   const selSize = $("selSize");
@@ -915,7 +873,7 @@ function rebuildGoalSelect() {
    SAVE & APPLY SETTINGS
    ───────────────────────────────────────────────────── */
 function saveAndApply() {
-
+  settings.mode = $("selMode").value;
   settings.size = parseInt($("selSize").value) || 3;
   settings.goal = parseInt($("selGoal").value) || 3;
   settings.ai   = $("selAI").value;
