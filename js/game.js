@@ -1042,12 +1042,14 @@ function renderDraftGrid() {
       card.classList.add("selected-draft");
     }
     
+    const name = ab.name || "";
+    const desc = ab.desc || "";
     card.innerHTML = `
       <div class="card-header cat-${ab.cat}">${ab.cat.toUpperCase()}</div>
       <div class="card-body">
         <span style="font-size:26px;">${ab.emoji}</span>
-        <div style="font-weight:700; font-size:14px; color:var(--text);">${ab.name}</div>
-        <div style="font-size:11px; opacity:0.7; color:var(--text); margin-top:2px;">${ab.desc}</div>
+        <div style="font-weight:700; font-size:14px; color:var(--text);">${name}</div>
+        <div style="font-size:11px; opacity:0.7; color:var(--text); margin-top:2px;">${desc}</div>
       </div>
     `;
     
@@ -1091,10 +1093,11 @@ function renderAbilitiesBar() {
       card.classList.add("active-perk");
     }
     
+    const name = ab.name || "";
     // Добавляем emoji, короткое имя и категорию в верстку
     card.innerHTML = `
       <div class="card-header cat-${ab.cat}" style="font-size:9px; padding:3px 2px;">${ab.emoji} ${ab.cat.toUpperCase()}</div>
-      <div style="padding:4px; text-align:center; font-size:11px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${ab.name}</div>
+      <div style="padding:4px; text-align:center; font-size:11px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</div>
     `;
     
     card.onclick = (e) => {
