@@ -226,10 +226,12 @@ button, .chip, .tab, .cell, select, input {
   width: 100%;
   border-radius: 28px;
   background: var(--glass-bg);
-  backdrop-filter: blur(25px) saturate(160%);
-  -webkit-backdrop-filter: blur(25px) saturate(160%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255,255,255,0.18);
   box-shadow: 0 16px 40px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.1);
+  will-change: transform;
+  transform: translateZ(0);
   padding: 28px 24px;
   position: relative;
   animation: fadeSlideUp 0.5s var(--ease-smooth) backwards;
@@ -705,8 +707,8 @@ input:focus, select:focus {
 .modal {
   border-radius: 28px;
   background: var(--glass-bg);
-  backdrop-filter: blur(25px) saturate(160%);
-  -webkit-backdrop-filter: blur(25px) saturate(160%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255,255,255,0.18);
   box-shadow: 0 16px 40px rgba(0,0,0,0.2), inset 0 0 0 1px rgba(255,255,255,0.1);
   width: min(340px, 100%);

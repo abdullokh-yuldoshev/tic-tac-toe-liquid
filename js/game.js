@@ -840,7 +840,7 @@ function syncSettingsForm() {
   $("inpP2").value = settings.p2;
   $("inpP3").value = settings.p3;
   $("inpP4").value = settings.p4;
-  $("nameGrid34").style.display = (settings.mode === "p3" || settings.mode === "p4") ? "grid" : "none";
+  $("nameGrid34").style.display = (settings.mode === "p3" || settings.mode === "p4") ? "flex" : "none";
 
   $("inpSym1").value = settings.sym1;
   $("inpSym2").value = settings.sym2;
@@ -1118,7 +1118,7 @@ function renderUI() {
   $("lblGoal").textContent       = t.goal;
   $("lblAI").textContent         = t.ai;
   $("lblNames").textContent      = t.playersLabel;
-  $("lblCustomSym").textContent  = t.lblCustomSym;
+
 
   updateStatsUI();
   updateCareerUI();
