@@ -840,7 +840,8 @@ function syncSettingsForm() {
   $("inpP2").value = settings.p2;
   $("inpP3").value = settings.p3;
   $("inpP4").value = settings.p4;
-  $("nameGrid34").style.display = (settings.mode === "p3" || settings.mode === "p4") ? "flex" : "none";
+  if ($("rowP3")) $("rowP3").style.display = (settings.mode === "p3" || settings.mode === "p4") ? "flex" : "none";
+  if ($("rowP4")) $("rowP4").style.display = (settings.mode === "p4") ? "flex" : "none";
 
   $("inpSym1").value = settings.sym1;
   $("inpSym2").value = settings.sym2;
