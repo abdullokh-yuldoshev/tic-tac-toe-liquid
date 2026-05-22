@@ -8,7 +8,8 @@
   <meta http-equiv="Expires" content="0" />
   <meta name="description" content="Tic-Tac-Toe Liquid Premium — ультра-премиальная игра с дизайном Liquid Glass, Gold-темой и поддержкой Telegram WebApp." />
   <title>Tic-Tac-Toe – Alex Edition</title>
-  <link rel="stylesheet" href="css/style.css?v=3.7.6">
+  <link rel="stylesheet" href="css/style.css?v=3.8.0">
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 
 <body>
@@ -61,6 +62,7 @@
             <button id="btnStart" class="btn btnPrimary" type="button">
               ▶ Начать игру
             </button>
+            <button id="btnCreateOnline" class="btn btnPrimary" style="margin-top: 10px; background: linear-gradient(135deg, #11998e, #38ef7d);">🌐 Сетевая игра (Раздать)</button>
             <button id="btnInfo" class="btn btnSec" type="button" style="margin-top: 12px;">ℹ Об авторе</button>
           </div>
         </div>
@@ -205,6 +207,15 @@
     </div>
   </div>
 
-  <script src="js/game.js?v=3.7.6"></script>
+  <div id="netModal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:9999;">
+    <div class="glass-panel" style="padding:20px; text-align:center; max-width:90%; width:320px;">
+      <div id="netStatusTitle" style="font-weight:700; font-size:18px; margin-bottom:10px; color:var(--text);">Создание комнаты...</div>
+      <div id="netStatusDesc" style="font-size:12px; opacity:0.8; margin-bottom:15px; color:var(--text); word-break:break-all;">Генерируем P2P ссылку...</div>
+      <button id="btnCopyNetLink" class="btn btnPrimary" style="font-size:12px; padding:8px; display:none; margin-bottom:10px; width:100%;">📋 Копировать ссылку</button>
+      <button id="btnCancelNet" class="btn btnSec" style="font-size:12px; padding:6px 12px; width:100%;">Отмена</button>
+    </div>
+  </div>
+
+  <script src="js/game.js?v=3.8.0"></script>
 </body>
 </html>

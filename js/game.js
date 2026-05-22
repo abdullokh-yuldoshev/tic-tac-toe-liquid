@@ -5,6 +5,14 @@
  * =====================================================================
  */
 
+const network = {
+  peer: null,
+  conn: null,
+  isHost: false,
+  isActive: false,
+  roomID: null
+};
+
 /* ─────────────────────────────────────────────────────
    AUDIO SUBSYSTEM (Web Audio API)
    ───────────────────────────────────────────────────── */
@@ -685,6 +693,7 @@ function init() {
   Confetti.init('confettiCanvas');
   applyTheme();
   renderUI();
+  initP2PNetwork();
 
   /* ── Event Listeners ── */
   $("btnStart").onclick = () => {
@@ -698,6 +707,41 @@ function init() {
       startNewGame();
     }
   };
+
+  if ($("btnCreateOnline")) {
+    $("btnCreateOnline").onclick = () => {
+      Sfx.click(settings.sound);
+      Haptic.trigger('medium');
+      startNetworkHost();
+    };
+  }
+  
+  if ($("btnCancelNet")) {
+    $("btnCancelNet").onclick = () => {
+      Sfx.click(settings.sound);
+      $("netModal").classList.add("hidden");
+      if (network.peer) {
+        network.peer.destroy();
+        network.peer = null;
+      }
+      network.isActive = false;
+      
+      // If we were a guest, remove ?room from URL
+      if (!network.isHost) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    };
+  }
+
+  if ($("btnCopyNetLink")) {
+    $("btnCopyNetLink").onclick = () => {
+      Sfx.click(settings.sound);
+      const link = window.location.origin + window.location.pathname + "?room=" + network.peer.id;
+      navigator.clipboard.writeText(link).then(() => {
+        showToast("Ссылка скопирована!");
+      });
+    };
+  }
 
   $("tabHome").onclick      = () => { Sfx.click(settings.sound); go("home"); };
   $("tabSettings").onclick  = () => { Sfx.click(settings.sound); go("settings"); };
@@ -1498,6 +1542,98 @@ function saveGameData() {
     history,
     gameOver
   });
+}
+
+/* ─────────────────────────────────────────────────────
+   NETWORK (P2P via PeerJS)
+   ───────────────────────────────────────────────────── */
+function initP2PNetwork() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const room = urlParams.get('room');
+  
+  if (room) {
+    network.isHost = false;
+    network.isActive = true;
+    network.roomID = room;
+    
+    $("netModal").classList.remove("hidden");
+    $("netStatusTitle").textContent = "Подключение...";
+    $("netStatusDesc").textContent = "Ищем создателя игры...";
+    $("btnCopyNetLink").style.display = "none";
+    
+    network.peer = new Peer();
+    
+    network.peer.on('open', (id) => {
+      network.conn = network.peer.connect(room);
+      setupConnection(network.conn);
+    });
+    
+    network.peer.on('error', (err) => {
+      $("netStatusTitle").textContent = "Ошибка сети";
+      $("netStatusDesc").textContent = (err.type === "peer-unavailable") ? "Комната не найдена или хост отключился." : "Ошибка: " + err.message;
+      $("btnCancelNet").textContent = "Закрыть";
+    });
+  }
+}
+
+function startNetworkHost() {
+  network.isHost = true;
+  network.isActive = true;
+  
+  $("netModal").classList.remove("hidden");
+  $("netStatusTitle").textContent = "Создание комнаты...";
+  $("netStatusDesc").textContent = "Генерируем P2P ссылку...";
+  $("btnCopyNetLink").style.display = "none";
+  $("btnCancelNet").textContent = "Отмена";
+  
+  network.peer = new Peer();
+  
+  network.peer.on('open', (id) => {
+    network.roomID = id;
+    $("netStatusDesc").textContent = "Ожидаем подключения второго игрока...";
+    $("btnCopyNetLink").style.display = "block";
+  });
+  
+  network.peer.on('connection', (conn) => {
+    network.conn = conn;
+    setupConnection(network.conn);
+  });
+  
+  network.peer.on('error', (err) => {
+    $("netStatusTitle").textContent = "Ошибка сети";
+    $("netStatusDesc").textContent = "Ошибка: " + err.message;
+    $("btnCopyNetLink").style.display = "none";
+  });
+}
+
+function setupConnection(conn) {
+  conn.on('open', () => {
+    $("netModal").classList.add("hidden");
+    showToast(network.isHost ? "Игрок подключился!" : "Успешно подключено к игре!");
+    
+    // Force 1 vs 1 mode for simplicity in this stage
+    settings.mode = "pvp";
+    saveSettings(settings);
+    syncSettingsForm();
+    
+    startNewGame();
+  });
+  
+  conn.on('data', (data) => {
+    handleNetworkData(data);
+  });
+  
+  conn.on('close', () => {
+    showToast("Соединение разорвано");
+    network.isActive = false;
+    board = []; gameOver = false;
+    saveGameData();
+    go("home");
+  });
+}
+
+function handleNetworkData(data) {
+  console.log("Received P2P data:", data);
 }
 
 /* ─────────────────────────────────────────────────────
