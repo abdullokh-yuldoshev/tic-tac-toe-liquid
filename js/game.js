@@ -161,6 +161,7 @@ function defaultSettings() {
   return {
     lang:  "ru",
     theme: "light",
+    matchMode: "classic",
     mode:  "pvp",
     size:  3,
     goal:  3,
@@ -491,6 +492,23 @@ const I18N = {
     statsTitle: "Статистика", statsTotal: "Всего:", statsWins: "Побед:", statsWinrate: "Винрейт:",
     careerTitle: "Уровень Карьеры", careerXp: "Опыт:",
     btnAbout: "ℹ Об авторе",
+    lblMatchMod: "Тип матча",
+    modClassic: "Классика (Обычная игра)",
+    modSuper: "Супер-режим (С абилками)",
+    draftTitle: "Выбор способностей",
+    draftSub: (p, c) => `Ход: ${p} (${c}/3)`,
+    abilitiesData: [
+      { name: "Удар Тора", desc: "Выжигает любую занятую клетку врага.", cat: "atk", emoji: "💥" },
+      { name: "Хакинг", desc: "Перекрашивает чужую фигуру в твой символ.", cat: "atk", emoji: "🔄" },
+      { name: "Землетрясение", desc: "Перемешивает 3 случайные фигуры на поле.", cat: "atk", emoji: "🌪️" },
+      { name: "Заморозка", desc: "Блокирует пустую клетку на 2 хода.", cat: "def", emoji: "❄️" },
+      { name: "Щит", desc: "Защищает твою фигуру от Тора и Хакинга.", cat: "def", emoji: "🛡️" },
+      { name: "Оглушение", desc: "Заставляет врага пропустить 1 следующий ход.", cat: "def", emoji: "🛑" },
+      { name: "Блицкриг", desc: "Позволяет сделать 2 хода подряд в этот раунд.", cat: "tac", emoji: "👟" },
+      { name: "Телепорт", desc: "Переносит твою фигуру в пустое место.", cat: "tac", emoji: "🔮" },
+      { name: "Отмена", desc: "Отменяет самый последний ход соперника.", cat: "tac", emoji: "🕵️♂️" },
+      { name: "Зеркало", desc: "Отражает направленную в тебя абилку назад.", cat: "tac", emoji: "🃏" }
+    ],
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Игрока", mode4: "4 Игрока",
     exit: "Выйти", undo: "Отмена", restart: "Заново",
     turn:  (n)  => `Ход: ${n}`,
@@ -518,6 +536,23 @@ const I18N = {
     statsTitle: "Statistics", statsTotal: "Total:", statsWins: "Wins:", statsWinrate: "Win Rate:",
     careerTitle: "Career Level", careerXp: "XP:",
     btnAbout: "ℹ About Author",
+    lblMatchMod: "Match Type",
+    modClassic: "Classic (Standard Game)",
+    modSuper: "Super Mode (Abilities)",
+    draftTitle: "Draft Abilities",
+    draftSub: (p, c) => `Turn: ${p} (${c}/3)`,
+    abilitiesData: [
+      { name: "Thor's Strike", desc: "Strikes and clears any occupied cell.", cat: "atk", emoji: "💥" },
+      { name: "Hacking", desc: "Converts an enemy piece to your symbol.", cat: "atk", emoji: "🔄" },
+      { name: "Earthquake", desc: "Shuffles 3 random pieces on the board.", cat: "atk", emoji: "🌪️" },
+      { name: "Freeze", desc: "Blocks an empty cell for 2 turns.", cat: "def", emoji: "❄️" },
+      { name: "Shield", desc: "Protects your piece from Thor or Hacking.", cat: "def", emoji: "🛡️" },
+      { name: "Stun", desc: "Forces selected opponent to skip 1 turn.", cat: "def", emoji: "🛑" },
+      { name: "Blitzkrieg", desc: "Grants you an extra move immediately.", cat: "tac", emoji: "👟" },
+      { name: "Teleport", desc: "Moves your existing piece to any empty cell.", cat: "tac", emoji: "🔮" },
+      { name: "Cancel", desc: "Reverts the last move made by an opponent.", cat: "tac", emoji: "🕵️♂️" },
+      { name: "Mirror", desc: "Passively counters and reflects enemy perks.", cat: "tac", emoji: "🃏" }
+    ],
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Players", mode4: "4 Players",
     exit: "Exit", undo: "Undo", restart: "Restart",
     turn:  (n)  => `Turn: ${n}`,
@@ -545,6 +580,23 @@ const I18N = {
     statsTitle: "Statistika", statsTotal: "Jami:", statsWins: "G'alaba:", statsWinrate: "Yutuq:",
     careerTitle: "Karera darajasi", careerXp: "Tajriba:",
     btnAbout: "ℹ Muallif haqida",
+    lblMatchMod: "O'yin turi",
+    modClassic: "Klassika (Oddiy o'yin)",
+    modSuper: "Super Rejim (Abilkalar)",
+    draftTitle: "Qobiliyatlar tanlovi",
+    draftSub: (p, c) => `Navbat: ${p} (${c}/3)`,
+    abilitiesData: [
+      { name: "Tor Zarbasi", desc: "Istalgan band katakni yo'q qiladi.", cat: "atk", emoji: "💥" },
+      { name: "Xaking", desc: "Raqib belgisini o'zingiznikiga o'zgartiradi.", cat: "atk", emoji: "🔄" },
+      { name: "Zilzila", desc: "Jamoadagi 3 ta belgini tasodifiy aralashtiradi.", cat: "atk", emoji: "🌪️" },
+      { name: "Muzlatish", desc: "Bo'sh katakni 2 turgacha muzlatib qo'yadi.", cat: "def", emoji: "❄️" },
+      { name: "Qalqon", desc: "Belgingizni Tor va Xakingdan himoya qiladi.", cat: "def", emoji: "🛡️" },
+      { name: "Stun", desc: "Raqibni 1 ta navbatni o'tkazib yuborishga majbur qiladi.", cat: "def", emoji: "🛑" },
+      { name: "Blitskrig", desc: "Ketma-ket 2 marta yurish imkonini beradi.", cat: "tac", emoji: "👟" },
+      { name: "Teleport", desc: "Belgingizni boshqa bo'sh katakka ko'chiradi.", cat: "tac", emoji: "🔮" },
+      { name: "Bekor qilish", desc: "Raqibning oxirgi yurishini bekor qiladi.", cat: "tac", emoji: "🕵️♂️" },
+      { name: "Ko'zgu", desc: "Sizga qarshi ishlatilgan perkni qaytaradi.", cat: "tac", emoji: "🃏" }
+    ],
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Kishi", mode4: "4 Kishi",
     exit: "Chiqish", undo: "Bekor", restart: "Qayta",
     turn:  (n)  => `Navbat: ${n}`,
@@ -596,6 +648,18 @@ const $ = id => document.getElementById(id);
 /* ─────────────────────────────────────────────────────
    GAME STATE
    ───────────────────────────────────────────────────── */
+let superMode = {
+  activeAbility: null,
+  playerDecks: {},
+  usedAbilities: {},
+  activeStuns: {},
+  frozenCells: {},
+  shieldedCells: {},
+  lastMove: null,
+  draftOrder: [],
+  draftTurnIndex: 0
+};
+
 let settings = loadSettings();
 let board    = [];
 let history  = [];
@@ -623,7 +687,17 @@ function init() {
   renderUI();
 
   /* ── Event Listeners ── */
-  $("btnStart").onclick     = () => { Sfx.click(settings.sound); Haptic.trigger('light'); startNewGame(); };
+  $("btnStart").onclick = () => {
+    Sfx.click(settings.sound);
+    Haptic.trigger('light');
+    if (settings.matchMode === "super") {
+      $("screenHome").classList.add("hidden");
+      $("screenDraft").classList.remove("hidden");
+      startDraftPhase();
+    } else {
+      startNewGame();
+    }
+  };
 
   $("tabHome").onclick      = () => { Sfx.click(settings.sound); go("home"); };
   $("tabSettings").onclick  = () => { Sfx.click(settings.sound); go("settings"); };
@@ -798,6 +872,11 @@ function syncSettingsForm() {
   const t = I18N[settings.lang];
 
 
+  const selMM = $("selMatchMode");
+  if (selMM) {
+    selMM.innerHTML = `<option value="classic">${t.modClassic}</option><option value="super">${t.modSuper}</option>`;
+    selMM.value = settings.matchMode || "classic";
+  }
 
   const selMode = $("selMode");
   selMode.innerHTML = "";
@@ -874,6 +953,7 @@ function rebuildGoalSelect() {
    SAVE & APPLY SETTINGS
    ───────────────────────────────────────────────────── */
 function saveAndApply() {
+  if ($("selMatchMode")) settings.matchMode = $("selMatchMode").value;
   settings.mode = $("selMode").value;
   settings.size = parseInt($("selSize").value) || 3;
   settings.goal = parseInt($("selGoal").value) || 3;
@@ -898,6 +978,146 @@ function saveAndApply() {
 /* ─────────────────────────────────────────────────────
    GAME: START
    ───────────────────────────────────────────────────── */
+function startDraftPhase() {
+  const t = I18N[settings.lang];
+  superMode.playerDecks = { 1: [], 2: [], 3: [], 4: [] };
+  superMode.usedAbilities = { 1: [], 2: [], 3: [], 4: [] };
+  superMode.draftTurnIndex = 0;
+  
+  superMode.draftOrder = [1, 2];
+  if (settings.mode === "p3") superMode.draftOrder = [1, 2, 3];
+  if (settings.mode === "p4") superMode.draftOrder = [1, 2, 3, 4];
+  
+  renderDraftGrid();
+}
+
+function renderDraftGrid() {
+  const t = I18N[settings.lang];
+  const grid = $("draftGrid");
+  const sub = $("draftSubtitle");
+  if (!grid || !sub) return;
+  
+  grid.innerHTML = "";
+  
+  let totalNeeded = superMode.draftOrder.length * 3;
+  let currentTotal = Object.values(superMode.playerDecks).reduce((a, b) => a + b.length, 0);
+  
+  if (currentTotal >= totalNeeded) {
+    $("screenDraft").classList.add("hidden");
+    startNewGame();
+    return;
+  }
+  
+  let activePlayerIdx = superMode.draftOrder[superMode.draftTurnIndex % superMode.draftOrder.length];
+  
+  // Проверка на лимит игрока (макс 3 карты)
+  while (superMode.playerDecks[activePlayerIdx].length >= 3) {
+    superMode.draftTurnIndex++;
+    activePlayerIdx = superMode.draftOrder[superMode.draftTurnIndex % superMode.draftOrder.length];
+  }
+  
+  let pName = getPlayerName(activePlayerIdx);
+  sub.textContent = t.draftSub(pName, superMode.playerDecks[activePlayerIdx].length);
+  
+  // Логика автоматического драфта ИИ
+  if (settings.mode === "ai" && activePlayerIdx === 2) {
+    setTimeout(() => {
+      let available = [];
+      for (let i = 0; i < 10; i++) {
+        if (!superMode.playerDecks[2].includes(i)) available.push(i);
+      }
+      let randomChoice = available[Math.floor(Math.random() * available.length)];
+      superMode.playerDecks[2].push(randomChoice);
+      superMode.draftTurnIndex++;
+      renderDraftGrid();
+    }, 400);
+    return;
+  }
+  
+  // Рендер 10 карточек в стиле Монополии
+  t.abilitiesData.forEach((ab, idx) => {
+    const card = document.createElement("div");
+    card.className = "ability-card";
+    if (superMode.playerDecks[activePlayerIdx].includes(idx)) {
+      card.classList.add("selected-draft");
+    }
+    
+    card.innerHTML = `
+      <div class="card-header cat-${ab.cat}">${ab.cat.toUpperCase()}</div>
+      <div class="card-body">
+        <span style="font-size:26px;">${ab.emoji}</span>
+        <div style="font-weight:700; font-size:14px; color:var(--text);">${ab.name}</div>
+        <div style="font-size:11px; opacity:0.7; color:var(--text); margin-top:2px;">${ab.desc}</div>
+      </div>
+    `;
+    
+    card.onclick = () => {
+      Sfx.click(settings.sound);
+      Haptic.trigger('light');
+      superMode.playerDecks[activePlayerIdx].push(idx);
+      superMode.draftTurnIndex++;
+      renderDraftGrid();
+    };
+    grid.appendChild(card);
+  });
+}
+
+function renderAbilitiesBar() {
+  const bar = $("gameAbilitiesBar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  
+  if (settings.matchMode !== "super") return;
+  
+  const t = I18N[settings.lang];
+  let pIdx = history.length % getPlayersCount(); // Берем текущего ходящего игрока
+  let deck = superMode.playerDecks[pIdx] || [];
+  
+  deck.forEach(abId => {
+    const ab = t.abilitiesData[abId];
+    const card = document.createElement("div");
+    card.className = "ability-card";
+    card.style.flex = "1";
+    card.style.maxWidth = "110px";
+    
+    if (superMode.usedAbilities[pIdx] && superMode.usedAbilities[pIdx].includes(abId)) {
+      card.classList.add("used");
+    }
+    if (superMode.activeAbility === abId) {
+      card.classList.add("active-perk");
+    }
+    
+    card.innerHTML = `
+      <div class="card-header cat-${ab.cat}" style="font-size:9px; padding:3px;">${ab.emoji}</div>
+      <div style="padding:6px; text-align:center; font-size:11px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden;">${ab.name}</div>
+    `;
+    
+    card.onclick = (e) => {
+      e.stopPropagation();
+      if (superMode.usedAbilities[pIdx].includes(abId)) return;
+      
+      Sfx.click(settings.sound);
+      Haptic.trigger('medium');
+      
+      if (superMode.activeAbility === abId) {
+        superMode.activeAbility = null;
+      } else {
+        superMode.activeAbility = abId;
+        
+        // Моментальная обработка абилок без выбора клетки (например, Блицкриг)
+        if (abId === 6) { // Блицкриг
+          superMode.usedAbilities[pIdx].push(6);
+          superMode.activeAbility = null;
+          showToast("👟 Блицкриг! +1 Ход");
+          // Просто не меняем игрока при следующем ходе
+        }
+      }
+      renderGame();
+      renderAbilitiesBar();
+    };
+    bar.appendChild(card);
+  });
+}
 function startNewGame() {
   board    = Array(settings.size * settings.size).fill("");
   history  = [];
@@ -946,7 +1166,37 @@ function renderGame() {
     if (winLine.includes(idx)) c.classList.add("cellWin");
     if (gameOver || val)       c.classList.add("cellDisabled");
 
-    c.onclick = () => makeMove(idx);
+    c.onclick = () => {
+      if (settings.matchMode === "super" && superMode.activeAbility !== null) {
+        let pIdx = history.length % getPlayersCount();
+        
+        if (superMode.activeAbility === 0) { // Удар Тора
+          if (board[idx] !== "") {
+            board[idx] = "";
+            superMode.usedAbilities[pIdx].push(0);
+            superMode.activeAbility = null;
+            showToast("💥 Клетка выжжена!");
+            renderGame();
+            renderAbilitiesBar();
+            return;
+          }
+        }
+        
+        if (superMode.activeAbility === 1) { // Хакинг
+          if (board[idx] !== "" && board[idx] !== SYMBOLS[pIdx]) {
+            board[idx] = SYMBOLS[pIdx];
+            superMode.usedAbilities[pIdx].push(1);
+            superMode.activeAbility = null;
+            showToast("🔄 Фигура взломана!");
+            renderGame();
+            renderAbilitiesBar();
+            return;
+          }
+        }
+        return;
+      }
+      makeMove(idx);
+    };
     bEl.appendChild(c);
   });
 
@@ -967,6 +1217,8 @@ function renderGame() {
 
   $("btnUndo").disabled     = (history.length === 0 || gameOver);
   $("btnUndo").style.opacity = $("btnUndo").disabled ? "0.45" : "1";
+  
+  renderAbilitiesBar();
 }
 
 /* ─────────────────────────────────────────────────────

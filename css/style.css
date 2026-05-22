@@ -819,3 +819,76 @@ input:focus, select:focus {
   position: fixed; bottom: -100%; left: 0; right: 0; background: var(--glass-bg); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border-radius: 32px 32px 0 0; z-index: 200; transition: bottom 0.5s cubic-bezier(0.32, 1, 0.2, 1); padding: 24px; padding-bottom: env(safe-area-inset-bottom, 30px); border-top: 1px solid rgba(255,255,255,0.18);
 }
 .bottom-sheet.on { bottom: 0; }
+
+/* ─── SUPER MODE: DRAFT & ABILITIES ──────────────────── */
+.screen-draft {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 150;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  will-change: transform;
+  transform: translateZ(0);
+}
+.ability-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  position: relative;
+  box-shadow: var(--glass-shadow);
+}
+.ability-card:active {
+  transform: scale(0.96);
+}
+.ability-card .card-header {
+  padding: 6px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+.ability-card .card-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.cat-atk { background: linear-gradient(135deg, #ff4d4d, #cc0000); }
+.cat-def { background: linear-gradient(135deg, #3399ff, #0055b3); }
+.cat-tac { background: linear-gradient(135deg, #ffcc00, #b38f00); }
+
+.ability-card.selected-draft {
+  border: 2px solid var(--gold);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.ability-card.used {
+  opacity: 0.2;
+  filter: grayscale(100%);
+  pointer-events: none;
+  box-shadow: none;
+}
+.ability-card.active-perk {
+  border: 2px solid #00ffcc;
+  box-shadow: 0 0 15px rgba(0, 255, 204, 0.4);
+}
+.player-abilities-bar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 15px;
+  min-height: 70px;
+  width: 100%;
+}
