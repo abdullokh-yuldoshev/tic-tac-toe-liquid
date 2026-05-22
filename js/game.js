@@ -1370,6 +1370,55 @@ function makeMove(idx, isLocal = false) {
   if (!gameOver && settings.mode === "ai" && getPlayersCount() === 2) {
     if ((history.length % 2) === 1) {
       setTimeout(() => {
+        if (settings.matchMode === "super") {
+          let botDecks = superMode.playerDecks[1] || [];
+          let usedAbilities = superMode.usedAbilities[1] || [];
+          
+          let hasThor = botDecks.includes(0) && !usedAbilities.includes(0);
+          let hasHack = botDecks.includes(1) && !usedAbilities.includes(1);
+          
+          if (hasThor || hasHack) {
+            let p0Threat = false;
+            for (let i = 0; i < board.length; i++) {
+              if (board[i] === "") {
+                board[i] = SYMBOLS[0];
+                if (checkWinSimple(board, settings.size, settings.goal)) p0Threat = true;
+                board[i] = "";
+              }
+            }
+            
+            let abilityFired = false;
+            // Hack logic
+            if (hasHack && !abilityFired) {
+              for (let i = 0; i < board.length; i++) {
+                if (board[i] === SYMBOLS[0]) {
+                  board[i] = SYMBOLS[1];
+                  if (checkWinSimple(board, settings.size, settings.goal) || p0Threat) {
+                    superMode.activeAbility = 1;
+                    executeCellClick(i, false);
+                    abilityFired = true;
+                    break;
+                  }
+                  board[i] = SYMBOLS[0];
+                }
+              }
+            }
+            // Thor logic
+            if (hasThor && !abilityFired && p0Threat) {
+              let p0Cells = [];
+              for(let i=0; i<board.length; i++) if(board[i] === SYMBOLS[0]) p0Cells.push(i);
+              if (p0Cells.length > 0) {
+                let cellToDestroy = p0Cells[Math.floor(Math.random() * p0Cells.length)];
+                superMode.activeAbility = 0;
+                executeCellClick(cellToDestroy, false);
+              }
+            }
+          }
+        }
+        
+        // Wait, if AI used an ability, we should re-evaluate or just let it make a move?
+        // The user says: "После применения суперспособности бот завершает ход".
+        // But the game logic dictates ability doesn't advance turn. So the bot MUST make a regular move too!
         const aiMove = getBotMove(board, settings, SYMBOLS);
         if (aiMove !== -1) makeMove(aiMove);
       }, 400);
@@ -1660,6 +1709,14 @@ function setupConnection(conn) {
     $("netModal").classList.add("hidden");
     showToast(network.isHost ? "Игрок подключился!" : "Успешно подключено к игре!");
     
+    if (network.isHost) {
+      network.conn.send({
+        type: "START_CONFIG",
+        settings: settings,
+        superDecks: superMode.playerDecks
+      });
+    }
+    
     // Force 1 vs 1 mode for simplicity in this stage
     settings.mode = "pvp";
     saveSettings(settings);
@@ -1684,6 +1741,23 @@ function setupConnection(conn) {
 function handleNetworkData(data) {
   console.log("Received data:", data);
   if (!data || !data.type) return;
+
+  if (data.type === "START_CONFIG") {
+    console.log("Синхронизация настроек от хоста...", data.settings);
+    settings.size = data.settings.size;
+    settings.goal = data.settings.goal;
+    settings.matchMode = data.settings.matchMode;
+    settings.mode = "pvp";
+
+    if (data.superDecks) {
+      superMode.playerDecks = data.superDecks;
+    }
+
+    saveSettings(settings);
+    syncSettingsForm();
+    startNewGame();
+    return;
+  }
 
   if (data.type === "MOVE") {
     // Применяем ход соперника локально
