@@ -654,6 +654,19 @@ function init() {
     renderUI();
   };
 
+  // Mode Bottom Sheet Trigger
+  $("triggerMode").onclick = () => {
+    Sfx.click(settings.sound);
+    $("sheetOverlay").classList.add("on");
+    $("modeSheet").classList.add("on");
+  };
+
+  $("sheetOverlay").onclick = () => {
+    Sfx.click(settings.sound);
+    $("sheetOverlay").classList.remove("on");
+    $("modeSheet").classList.remove("on");
+  };
+
   // Theme dropdown
   $("btnThemeToggle").onclick = (e) => {
     Sfx.click(settings.sound);
@@ -736,6 +749,11 @@ function init() {
    NAVIGATION
    ───────────────────────────────────────────────────── */
 function go(scr) {
+  const sheet = $("modeSheet");
+  const overlay = $("sheetOverlay");
+  if (sheet) sheet.classList.remove("on");
+  if (overlay) overlay.classList.remove("on");
+
   screenHome.classList.add("hidden");
   screenSettings.classList.add("hidden");
   screenGame.classList.add("hidden");
@@ -796,26 +814,42 @@ function syncSettingsForm() {
 
 
 
-  // Mode chips
-  const chipsDiv = $("modeChips");
-  chipsDiv.innerHTML = "";
-  MODES.forEach(m => {
-    const b = document.createElement("div");
-    b.className  = "chip" + (settings.mode === m.id ? " chipOn" : "");
-    b.textContent = t[m.key];
-    b.onclick = () => {
-      Sfx.click(settings.sound);
-      Haptic.trigger('light');
+  // Mode Bottom Sheet Options
+  const modeOptions = $("modeOptions");
+  const currentModeText = $("currentModeText");
+  const modeIcons = { "pvp": "👥", "ai": "🤖", "p3": "🤺", "p4": "⚔️" };
+  
+  if (modeOptions) {
+    modeOptions.innerHTML = "";
+    MODES.forEach(m => {
+      const isSel = settings.mode === m.id;
+      if (isSel && currentModeText) {
+        currentModeText.textContent = t[m.key];
+      }
       
-      // Update visual state immediately
-      Array.from(chipsDiv.children).forEach(c => c.classList.remove("chipOn"));
-      b.classList.add("chipOn");
+      const b = document.createElement("div");
+      b.style.display = "flex";
+      b.style.alignItems = "center";
+      b.style.gap = "12px";
+      b.style.padding = "16px";
+      b.style.background = isSel ? "rgba(255,255,255,0.15)" : "transparent";
+      b.style.borderRadius = "16px";
+      b.style.border = isSel ? "1px solid rgba(255,255,255,0.3)" : "1px solid transparent";
+      b.style.cursor = "pointer";
+      b.style.transition = "all 0.2s";
+      b.innerHTML = `<span style="font-size: 24px;">${modeIcons[m.id] || "🎮"}</span> <span style="font-size: 16px; font-weight: 500;">${t[m.key]}</span>`;
       
-      settings.mode = m.id;
-      saveAndApply();
-    };
-    chipsDiv.appendChild(b);
-  });
+      b.onclick = () => {
+        Sfx.click(settings.sound);
+        Haptic.trigger('medium');
+        settings.mode = m.id;
+        $("sheetOverlay").classList.remove("on");
+        $("modeSheet").classList.remove("on");
+        saveAndApply();
+      };
+      modeOptions.appendChild(b);
+    });
+  }
 
   // Size selector
   const selSize = $("selSize");
@@ -881,10 +915,6 @@ function rebuildGoalSelect() {
    SAVE & APPLY SETTINGS
    ───────────────────────────────────────────────────── */
 function saveAndApply() {
-  const chips = $("modeChips").children;
-  for (let i = 0; i < chips.length; i++) {
-    if (chips[i].classList.contains("chipOn")) settings.mode = MODES[i].id;
-  }
 
   settings.size = parseInt($("selSize").value) || 3;
   settings.goal = parseInt($("selGoal").value) || 3;
