@@ -728,7 +728,16 @@ function init() {
     renderUI();
   };
 
-  $("selMode").onchange = () => { settings.mode = $("selMode").value; saveAndApply(); };
+  if ($("selMode")) {
+    $("selMode").onchange = () => {
+      const currentMode = $("selMode").value;
+      if ($("rowP3")) $("rowP3").style.display = (currentMode === "p3" || currentMode === "p4") ? "flex" : "none";
+      if ($("rowP4")) $("rowP4").style.display = (currentMode === "p4") ? "flex" : "none";
+      // Сохраняем промежуточное состояние, чтобы не терялось при переключении
+      settings.mode = currentMode;
+      saveAndApply();
+    };
+  }
 
   // Theme dropdown
   $("btnThemeToggle").onclick = (e) => {
@@ -1037,23 +1046,38 @@ function renderDraftGrid() {
   // Рендер 10 карточек в стиле Монополии
   t.abilitiesData.forEach((ab, idx) => {
     const card = document.createElement("div");
+    // Делаем элемент списком во всю ширину
     card.className = "ability-card";
+    card.style.display = "flex";
+    card.style.flexDirection = "row";
+    card.style.alignItems = "center";
+    card.style.width = "100%";
+    card.style.marginHeight = "6px";
+    card.style.background = "var(--glass-bg)";
+    card.style.border = "1px solid var(--glass-border)";
+    card.style.borderRadius = "12px";
+    card.style.padding = "8px 12px";
+    card.style.gap = "14px";
+    card.style.textAlign = "left";
+
     if (superMode.playerDecks[activePlayerIdx].includes(idx)) {
-      card.classList.add("selected-draft");
+      card.style.opacity = "0.4";
+      card.style.border = "1px solid var(--gold)";
     }
-    
-    const name = ab.name || "";
-    const desc = ab.desc || "";
+
     card.innerHTML = `
-      <div class="card-header cat-${ab.cat}">${ab.cat.toUpperCase()}</div>
-      <div class="card-body">
-        <span style="font-size:26px;">${ab.emoji}</span>
-        <div style="font-weight:700; font-size:14px; color:var(--text);">${name}</div>
-        <div style="font-size:11px; opacity:0.7; color:var(--text); margin-top:2px;">${desc}</div>
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 50px;">
+        <span style="font-size: 28px;">${ab.emoji}</span>
+        <span class="cat-${ab.cat}" style="font-size: 8px; font-weight: 900; padding: 2px 4px; border-radius: 4px; color: #fff; margin-top: 3px; text-transform: uppercase;">${ab.cat}</span>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0;">
+        <div style="font-weight: 700; font-size: 15px; color: var(--text); margin-bottom: 2px;">${ab.name}</div>
+        <div style="font-size: 11px; opacity: 0.75; color: var(--text); line-height: 1.3; word-break: break-word;">${ab.desc}</div>
       </div>
     `;
-    
+
     card.onclick = () => {
+      if (superMode.playerDecks[activePlayerIdx].includes(idx)) return;
       Sfx.click(settings.sound);
       Haptic.trigger('light');
       superMode.playerDecks[activePlayerIdx].push(idx);
