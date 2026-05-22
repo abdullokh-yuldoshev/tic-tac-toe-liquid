@@ -1648,30 +1648,31 @@ function saveGameData() {
 function initP2PNetwork() {
   const urlParams = new URLSearchParams(window.location.search);
   const room = urlParams.get('room');
+  if (!room) return;
   
-  if (room) {
-    network.isHost = false;
-    network.isActive = true;
-    network.roomID = room;
-    
-    $("netModal").classList.remove("hidden");
-    $("netStatusTitle").textContent = "Подключение...";
-    $("netStatusDesc").textContent = "Ищем создателя игры...";
-    $("btnCopyNetLink").style.display = "none";
-    
-    network.peer = new Peer();
-    
-    network.peer.on('open', (id) => {
-      network.conn = network.peer.connect(room);
-      setupConnection(network.conn);
-    });
-    
-    network.peer.on('error', (err) => {
-      $("netStatusTitle").textContent = "Ошибка сети";
-      $("netStatusDesc").textContent = (err.type === "peer-unavailable") ? "Комната не найдена или хост отключился." : "Ошибка: " + err.message;
-      $("btnCancelNet").textContent = "Закрыть";
-    });
-  }
+  network.isHost = false;
+  network.isActive = true;
+  network.roomID = room;
+  
+  $("netModal").classList.remove("hidden");
+  $("netStatusTitle").textContent = "Подключение...";
+  $("netStatusDesc").textContent = "Ищем создателя игры...";
+  $("btnCopyNetLink").style.display = "none";
+  
+  network.peer = new Peer();
+  
+  network.peer.on('open', (id) => {
+    // ГОСТЬ ИНИЦИИРУЕТ СОЕДИНЕНИЕ
+    const outgoingConn = network.peer.connect(room, { reliable: true });
+    network.conn = outgoingConn;
+    setupConnection(network.conn);
+  });
+  
+  network.peer.on('error', (err) => {
+    $("netStatusTitle").textContent = "Ошибка сети";
+    $("netStatusDesc").textContent = (err.type === "peer-unavailable") ? "Комната не найдена или хост отключился." : "Ошибка: " + err.message;
+    $("btnCancelNet").textContent = "Закрыть";
+  });
 }
 
 function startNetworkHost() {
@@ -1684,7 +1685,9 @@ function startNetworkHost() {
   $("btnCopyNetLink").style.display = "none";
   $("btnCancelNet").textContent = "Отмена";
   
-  network.peer = new Peer();
+  if (!network.peer || network.peer.destroyed) {
+    network.peer = new Peer();
+  }
   
   network.peer.on('open', (id) => {
     network.roomID = id;
@@ -1692,8 +1695,9 @@ function startNetworkHost() {
     $("btnCopyNetLink").style.display = "block";
   });
   
-  network.peer.on('connection', (conn) => {
-    network.conn = conn;
+  network.peer.on('connection', (incomingConn) => {
+    // ЖЕСТКАЯ ФИКСАЦИЯ КАНАЛА ДЛЯ ХОСТА
+    network.conn = incomingConn;
     setupConnection(network.conn);
   });
   
@@ -1707,30 +1711,33 @@ function startNetworkHost() {
 function setupConnection(conn) {
   conn.on('open', () => {
     $("netModal").classList.add("hidden");
-    showToast(network.isHost ? "Игрок подключился!" : "Успешно подключено к игре!");
+    showToast(network.isHost ? "Игрок подключился! Начинаем..." : "Успешно подключено к хосту!");
+    
+    settings.mode = "pvp"; // Переключаем в PvP режим
     
     if (network.isHost) {
-      network.conn.send({
-        type: "START_CONFIG",
-        settings: settings,
-        superDecks: superMode.playerDecks
-      });
+      // Хост мгновенно отправляет свои настройки гостю
+      setTimeout(() => {
+        if (network.conn && network.conn.open) {
+          network.conn.send({
+            type: "START_CONFIG",
+            settings: settings,
+            superDecks: superMode.playerDecks
+          });
+        }
+      }, 500);
+      startNewGame();
     }
-    
-    // Force 1 vs 1 mode for simplicity in this stage
-    settings.mode = "pvp";
-    saveSettings(settings);
-    syncSettingsForm();
-    
-    startNewGame();
   });
   
+  // Принудительно очищаем старые слушатели перед привязкой новых
+  conn.off('data');
   conn.on('data', (data) => {
     handleNetworkData(data);
   });
   
   conn.on('close', () => {
-    showToast("Соединение разорвано");
+    showToast("Соперник отключился");
     network.isActive = false;
     board = []; gameOver = false;
     saveGameData();
@@ -1767,6 +1774,7 @@ function handleNetworkData(data) {
     }
     // Вызываем стандартную функцию клика по клетке для соперника
     executeCellClick(data.cellIndex, false); 
+    renderGame(); // Жесткий форсированный рендер доски
   }
 
   if (data.type === "DRAFT_SELECT") {
