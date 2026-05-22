@@ -1122,9 +1122,24 @@ function renderDraftGrid() {
 
     card.onclick = () => {
       if (superMode.playerDecks[activePlayerIdx].includes(idx)) return;
+      
+      if (network.isActive) {
+        if (network.isHost && activePlayerIdx !== 0) return;
+        if (!network.isHost && activePlayerIdx !== 1) return;
+      }
+      
       Sfx.click(settings.sound);
       Haptic.trigger('light');
       superMode.playerDecks[activePlayerIdx].push(idx);
+      
+      if (network.isActive && network.conn && network.conn.open) {
+        network.conn.send({
+          type: "DRAFT_SELECT",
+          playerIdx: activePlayerIdx,
+          abilityId: idx
+        });
+      }
+      
       superMode.draftTurnIndex++;
       renderDraftGrid();
     };
@@ -1171,6 +1186,12 @@ function renderAbilitiesBar() {
     card.onclick = (e) => {
       e.stopPropagation();
       if (superMode.usedAbilities[pIdx] && superMode.usedAbilities[pIdx].includes(abId)) return;
+      
+      // Check if network mode and not our turn
+      if (network.isActive) {
+        if (network.isHost && pIdx !== 0) return;
+        if (!network.isHost && pIdx !== 1) return;
+      }
       
       Sfx.click(settings.sound);
       Haptic.trigger('medium');
@@ -1246,35 +1267,12 @@ function renderGame() {
     if (gameOver || val)       c.classList.add("cellDisabled");
 
     c.onclick = () => {
-      if (settings.matchMode === "super" && superMode.activeAbility !== null) {
-        let pIdx = history.length % getPlayersCount();
-        
-        if (superMode.activeAbility === 0) { // Удар Тора
-          if (board[idx] !== "") {
-            board[idx] = "";
-            superMode.usedAbilities[pIdx].push(0);
-            superMode.activeAbility = null;
-            showToast("💥 Клетка выжжена!");
-            renderGame();
-            renderAbilitiesBar();
-            return;
-          }
-        }
-        
-        if (superMode.activeAbility === 1) { // Хакинг
-          if (board[idx] !== "" && board[idx] !== SYMBOLS[pIdx]) {
-            board[idx] = SYMBOLS[pIdx];
-            superMode.usedAbilities[pIdx].push(1);
-            superMode.activeAbility = null;
-            showToast("🔄 Фигура взломана!");
-            renderGame();
-            renderAbilitiesBar();
-            return;
-          }
-        }
-        return;
+      if (network.isActive) {
+        let currentTurnIdx = history.length % getPlayersCount();
+        if (network.isHost && currentTurnIdx !== 0) { showToast("Сейчас ход соперника!"); return; }
+        if (!network.isHost && currentTurnIdx !== 1) { showToast("Сейчас ход соперника!"); return; }
       }
-      makeMove(idx);
+      executeCellClick(idx, true);
     };
     bEl.appendChild(c);
   });
@@ -1300,10 +1298,53 @@ function renderGame() {
   renderAbilitiesBar();
 }
 
+function executeCellClick(idx, isLocal = false) {
+  if (settings.matchMode === "super" && superMode.activeAbility !== null) {
+    let pIdx = history.length % getPlayersCount();
+    let abilityUsed = superMode.activeAbility;
+    
+    if (superMode.activeAbility === 0) { // Удар Тора
+      if (board[idx] !== "") {
+        board[idx] = "";
+        superMode.usedAbilities[pIdx].push(0);
+        superMode.activeAbility = null;
+        showToast("💥 Клетка выжжена!");
+        
+        if (isLocal && network.isActive && network.conn && network.conn.open) {
+          network.conn.send({ type: "MOVE", cellIndex: idx, abilityId: abilityUsed });
+        }
+        
+        renderGame();
+        renderAbilitiesBar();
+        return;
+      }
+    }
+    
+    if (superMode.activeAbility === 1) { // Хакинг
+      if (board[idx] !== "" && board[idx] !== SYMBOLS[pIdx]) {
+        board[idx] = SYMBOLS[pIdx];
+        superMode.usedAbilities[pIdx].push(1);
+        superMode.activeAbility = null;
+        showToast("🔄 Фигура взломана!");
+        
+        if (isLocal && network.isActive && network.conn && network.conn.open) {
+          network.conn.send({ type: "MOVE", cellIndex: idx, abilityId: abilityUsed });
+        }
+        
+        renderGame();
+        renderAbilitiesBar();
+        return;
+      }
+    }
+    return;
+  }
+  makeMove(idx, isLocal);
+}
+
 /* ─────────────────────────────────────────────────────
    GAME: MAKE MOVE
    ───────────────────────────────────────────────────── */
-function makeMove(idx) {
+function makeMove(idx, isLocal = false) {
   if (gameOver || board[idx]) return;
 
   Sfx.pop(settings.sound);
@@ -1312,6 +1353,14 @@ function makeMove(idx) {
   const pIdx  = history.length % getPlayersCount();
   board[idx]  = SYMBOLS[pIdx];
   history.push({ idx, p: pIdx });
+
+  if (isLocal && network.isActive && network.conn && network.conn.open) {
+    network.conn.send({
+      type: "MOVE",
+      cellIndex: idx,
+      abilityId: superMode.activeAbility // if any active ability that wasn't consumed
+    });
+  }
 
   checkWinCondition();
   saveGameData();
@@ -1633,7 +1682,28 @@ function setupConnection(conn) {
 }
 
 function handleNetworkData(data) {
-  console.log("Received P2P data:", data);
+  console.log("Received data:", data);
+  if (!data || !data.type) return;
+
+  if (data.type === "MOVE") {
+    // Применяем ход соперника локально
+    if (data.abilityId !== null) {
+      // Если соперник использовал способность, активируем её у него
+      superMode.activeAbility = data.abilityId;
+    }
+    // Вызываем стандартную функцию клика по клетке для соперника
+    executeCellClick(data.cellIndex, false); 
+  }
+
+  if (data.type === "DRAFT_SELECT") {
+    // Синхронизация выбора карт на экране драфта
+    const pIdx = data.playerIdx;
+    if (!superMode.playerDecks[pIdx].includes(data.abilityId)) {
+      superMode.playerDecks[pIdx].push(data.abilityId);
+      superMode.draftTurnIndex++;
+      renderDraftGrid();
+    }
+  }
 }
 
 /* ─────────────────────────────────────────────────────
