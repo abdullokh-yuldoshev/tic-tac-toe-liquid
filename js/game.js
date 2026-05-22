@@ -1056,8 +1056,8 @@ function renderDraftGrid() {
     card.style.background = "var(--glass-bg)";
     card.style.border = "1px solid var(--glass-border)";
     card.style.borderRadius = "12px";
-    card.style.padding = "6px 10px";
-    card.style.gap = "14px";
+    card.style.padding = "10px 14px";
+    card.style.gap = "0px";
     card.style.textAlign = "left";
 
     if (superMode.playerDecks[activePlayerIdx].includes(idx)) {
@@ -1066,13 +1066,13 @@ function renderDraftGrid() {
     }
 
     card.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 50px;">
-        <span style="font-size: 22px;">${ab.emoji}</span>
-        <span class="cat-${ab.cat}" style="font-size: 8px; font-weight: 900; padding: 2px 4px; border-radius: 4px; color: #fff; margin-top: 3px; text-transform: uppercase;">${ab.cat}</span>
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 55px; width: 55px; flex-shrink: 0; margin-right: 16px; box-sizing: border-box;">
+        <span style="font-size: 24px; line-height: 1; display: block; margin-bottom: 3px;">${ab.emoji}</span>
+        <span class="cat-${ab.cat}" style="font-size: 8px; font-weight: 900; padding: 2px 0; border-radius: 4px; color: #fff; text-transform: uppercase; display: block; text-align: center; width: 100%; box-sizing: border-box; line-height: 1.2;">${ab.cat}</span>
       </div>
-      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0;">
-        <div style="font-weight: 700; font-size: 13px; color: var(--text); margin-bottom: 2px;">${ab.name}</div>
-        <div style="font-size: 10.5px; opacity: 0.75; color: var(--text); line-height: 1.3; word-break: break-word;">${ab.desc}</div>
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; box-sizing: border-box; text-align: left;">
+        <div style="font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 2px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ab.name}</div>
+        <div style="font-size: 11px; opacity: 0.8; color: var(--text); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">${ab.desc}</div>
       </div>
     `;
 
