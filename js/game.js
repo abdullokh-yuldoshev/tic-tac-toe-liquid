@@ -980,13 +980,13 @@ function saveAndApply() {
    ───────────────────────────────────────────────────── */
 function startDraftPhase() {
   const t = I18N[settings.lang];
-  superMode.playerDecks = { 1: [], 2: [], 3: [], 4: [] };
-  superMode.usedAbilities = { 1: [], 2: [], 3: [], 4: [] };
+  superMode.playerDecks = { 0: [], 1: [], 2: [], 3: [] };
+  superMode.usedAbilities = { 0: [], 1: [], 2: [], 3: [] };
   superMode.draftTurnIndex = 0;
   
-  superMode.draftOrder = [1, 2];
-  if (settings.mode === "p3") superMode.draftOrder = [1, 2, 3];
-  if (settings.mode === "p4") superMode.draftOrder = [1, 2, 3, 4];
+  superMode.draftOrder = [0, 1];
+  if (settings.mode === "p3") superMode.draftOrder = [0, 1, 2];
+  if (settings.mode === "p4") superMode.draftOrder = [0, 1, 2, 3];
   
   renderDraftGrid();
 }
@@ -1020,14 +1020,14 @@ function renderDraftGrid() {
   sub.textContent = t.draftSub(pName, superMode.playerDecks[activePlayerIdx].length);
   
   // Логика автоматического драфта ИИ
-  if (settings.mode === "ai" && activePlayerIdx === 2) {
+  if (settings.mode === "ai" && activePlayerIdx === 1) {
     setTimeout(() => {
       let available = [];
       for (let i = 0; i < 10; i++) {
-        if (!superMode.playerDecks[2].includes(i)) available.push(i);
+        if (!superMode.playerDecks[1].includes(i)) available.push(i);
       }
       let randomChoice = available[Math.floor(Math.random() * available.length)];
-      superMode.playerDecks[2].push(randomChoice);
+      superMode.playerDecks[1].push(randomChoice);
       superMode.draftTurnIndex++;
       renderDraftGrid();
     }, 400);
