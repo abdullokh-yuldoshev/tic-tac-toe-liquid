@@ -1056,7 +1056,7 @@ function renderDraftGrid() {
     card.style.background = "var(--glass-bg)";
     card.style.border = "1px solid var(--glass-border)";
     card.style.borderRadius = "12px";
-    card.style.padding = "8px 12px";
+    card.style.padding = "6px 10px";
     card.style.gap = "14px";
     card.style.textAlign = "left";
 
@@ -1067,12 +1067,12 @@ function renderDraftGrid() {
 
     card.innerHTML = `
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 50px;">
-        <span style="font-size: 28px;">${ab.emoji}</span>
+        <span style="font-size: 22px;">${ab.emoji}</span>
         <span class="cat-${ab.cat}" style="font-size: 8px; font-weight: 900; padding: 2px 4px; border-radius: 4px; color: #fff; margin-top: 3px; text-transform: uppercase;">${ab.cat}</span>
       </div>
       <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0;">
-        <div style="font-weight: 700; font-size: 15px; color: var(--text); margin-bottom: 2px;">${ab.name}</div>
-        <div style="font-size: 11px; opacity: 0.75; color: var(--text); line-height: 1.3; word-break: break-word;">${ab.desc}</div>
+        <div style="font-weight: 700; font-size: 13px; color: var(--text); margin-bottom: 2px;">${ab.name}</div>
+        <div style="font-size: 10.5px; opacity: 0.75; color: var(--text); line-height: 1.3; word-break: break-word;">${ab.desc}</div>
       </div>
     `;
 
