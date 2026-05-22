@@ -1063,22 +1063,26 @@ function renderDraftGrid() {
 }
 
 function renderAbilitiesBar() {
-  const bar = $("gameAbilitiesBar");
+  const bar = document.getElementById("gameAbilitiesBar");
   if (!bar) return;
   bar.innerHTML = "";
   
-  if (settings.matchMode !== "super") return;
+  if (settings.matchMode !== "super" || gameOver) return;
   
   const t = I18N[settings.lang];
-  let pIdx = history.length % getPlayersCount(); // Берем текущего ходящего игрока
+  // Определяем текущего игрока (0, 1, 2, 3)
+  let pIdx = history.length % getPlayersCount(); 
   let deck = superMode.playerDecks[pIdx] || [];
   
   deck.forEach(abId => {
     const ab = t.abilitiesData[abId];
+    if (!ab) return;
+    
     const card = document.createElement("div");
     card.className = "ability-card";
     card.style.flex = "1";
     card.style.maxWidth = "110px";
+    card.style.minWidth = "80px";
     
     if (superMode.usedAbilities[pIdx] && superMode.usedAbilities[pIdx].includes(abId)) {
       card.classList.add("used");
@@ -1087,29 +1091,33 @@ function renderAbilitiesBar() {
       card.classList.add("active-perk");
     }
     
+    // Добавляем emoji, короткое имя и категорию в верстку
     card.innerHTML = `
-      <div class="card-header cat-${ab.cat}" style="font-size:9px; padding:3px;">${ab.emoji}</div>
-      <div style="padding:6px; text-align:center; font-size:11px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden;">${ab.name}</div>
+      <div class="card-header cat-${ab.cat}" style="font-size:9px; padding:3px 2px;">${ab.emoji} ${ab.cat.toUpperCase()}</div>
+      <div style="padding:4px; text-align:center; font-size:11px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${ab.name}</div>
     `;
     
     card.onclick = (e) => {
       e.stopPropagation();
-      if (superMode.usedAbilities[pIdx].includes(abId)) return;
+      if (superMode.usedAbilities[pIdx] && superMode.usedAbilities[pIdx].includes(abId)) return;
       
       Sfx.click(settings.sound);
       Haptic.trigger('medium');
       
       if (superMode.activeAbility === abId) {
         superMode.activeAbility = null;
+        showToast("Способность отменена");
       } else {
         superMode.activeAbility = abId;
+        showToast(`Активировано: ${ab.name}. Нажми на клетку!`);
         
-        // Моментальная обработка абилок без выбора клетки (например, Блицкриг)
-        if (abId === 6) { // Блицкриг
+        // Моментальный Блицкриг (id: 6) без выбора клетки
+        if (abId === 6) {
           superMode.usedAbilities[pIdx].push(6);
           superMode.activeAbility = null;
+          // Добавляем виртуальный пустой ход в историю, чтобы сдвинуть и вернуть ход обратно текущему игроку
+          history.push({ cell: -1, player: pIdx }); 
           showToast("👟 Блицкриг! +1 Ход");
-          // Просто не меняем игрока при следующем ходе
         }
       }
       renderGame();
@@ -1316,7 +1324,7 @@ function getPlayersCount() {
 
 function getPlayerName(idx) {
   if (idx === 0) return settings.p1;
-  if (idx === 1) return settings.p2;
+  if (idx === 1) return settings.mode === "ai" ? "AI" : settings.p2;
   if (idx === 2) return settings.p3;
   if (idx === 3) return settings.p4;
   return "Player";
