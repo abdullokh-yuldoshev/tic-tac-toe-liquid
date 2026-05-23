@@ -1060,8 +1060,11 @@ function startDraftTimer() {
       clearInterval(draftTimerInterval);
       draftTimerInterval = null;
       
+      let myIdx = network.isActive ? (network.isHost ? 0 : 1) : null;
+      
       // Auto-fill missing abilities
       for (let p of superMode.draftOrder) {
+        if (network.isActive && p !== myIdx) continue;
         let deck = superMode.playerDecks[p] || [];
         let available = [];
         for (let i = 0; i < 10; i++) {
@@ -1074,8 +1077,15 @@ function startDraftTimer() {
         }
       }
       
-      $("screenDraft").classList.add("hidden");
-      startNewGame();
+      if (network.isActive && network.conn && network.conn.open) {
+        network.conn.send({
+          type: "PLAYER_READY",
+          playerIdx: myIdx,
+          deck: superMode.playerDecks[myIdx]
+        });
+      }
+      
+      renderDraftGrid();
     }
   }, 1000);
 }
@@ -1088,13 +1098,34 @@ function renderDraftGrid() {
   
   grid.innerHTML = "";
   
-  let totalNeeded = superMode.draftOrder.length * 3;
-  let currentTotal = Object.values(superMode.playerDecks).reduce((a, b) => a + b.length, 0);
+  let hostDeck = superMode.playerDecks[0] || [];
+  let guestDeck = superMode.playerDecks[1] || [];
   
-  if (currentTotal >= totalNeeded) {
-    if (draftTimerInterval) clearInterval(draftTimerInterval);
+  // Если локальный игрок (Хост или Гость) набрал свои 3 карты, мы блокируем ему дальнейший клик и шлем пакет готовности
+  let myIdx = network.isHost ? 0 : 1;
+  if (superMode.playerDecks[myIdx] && superMode.playerDecks[myIdx].length >= 3) {
+    sub.textContent = "Ожидание соперника...";
+    if (network.isActive && network.conn && network.conn.open) {
+      network.conn.send({
+        type: "PLAYER_READY",
+        playerIdx: myIdx,
+        deck: superMode.playerDecks[myIdx]
+      });
+    }
+  }
+
+  // Игра РЕАЛЬНО начинается только тогда, когда в ОБОИХ колодах есть по 3 карты!
+  if (hostDeck.length >= 3 && guestDeck.length >= 3) {
+    if (draftTimerInterval) { clearInterval(draftTimerInterval); draftTimerInterval = null; }
     $("screenDraft").classList.add("hidden");
-    startNewGame();
+    
+    // Полный жесткий сброс игрового поля перед стартом сетевого боя
+    board = Array(settings.size * settings.size).fill("");
+    history = [];
+    gameOver = false;
+    winLine = [];
+    
+    renderGame();
     return;
   }
   
@@ -1531,8 +1562,10 @@ function getPlayersCount() {
 function getPlayerName(idx) {
   if (network.isActive) {
     if (network.isHost) {
+      // Для Хоста: 0 — это он сам, 1 — это Гость
       return idx === 0 ? "👑 Игрок 1 (Вы)" : "⚡ Игрок 2 (Соперник)";
     } else {
+      // Для Гостя: 1 — это он сам, 0 — это Хост
       return idx === 1 ? "👑 Игрок 1 (Вы)" : "⚡ Игрок 2 (Соперник)";
     }
   }
@@ -1829,6 +1862,13 @@ function handleNetworkData(data) {
       superMode.draftTurnIndex++;
       renderDraftGrid();
     }
+  }
+
+  if (data.type === "PLAYER_READY") {
+    console.log("Соперник готов, его колода:", data.deck);
+    superMode.playerDecks[data.playerIdx] = data.deck;
+    renderDraftGrid(); // Перерисовываем, чтобы сработал триггер старта игры
+    return;
   }
 }
 
