@@ -229,9 +229,9 @@ const Confetti = {
 /* ─────────────────────────────────────────────────────
    LOCAL STORAGE HELPERS
    ───────────────────────────────────────────────────── */
-const STORE_KEY = "ttt_settings_liquid_v3";
-const GAME_KEY  = "ttt_game_liquid_v3";
-const BUILD_VERSION = "4.0.0";
+const STORE_KEY = "ttt_settings_liquid_v4";
+const GAME_KEY  = "ttt_game_liquid_v4";
+const BUILD_VERSION = "4.1.0";
 
 function defaultSettings() {
   return {
@@ -712,10 +712,6 @@ const THEMES = [
 
 const SYMBOLS = ["X", "O", "△", "□"];
 
-/* SVG Icons */
-const iconSpk    = `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`;
-const iconSpkOff = `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51c.66-1.24 1.03-2.65 1.03-4.15 0-4.28-2.99-7.86-7-8.76v2.06c2.89.86 5 3.54 5 6.7zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`;
-
 /* ─────────────────────────────────────────────────────
    DOM HELPERS
    ───────────────────────────────────────────────────── */
@@ -728,10 +724,6 @@ let superMode = {
   activeAbility: null,
   playerDecks: {},
   usedAbilities: {},
-  activeStuns: {},
-  frozenCells: {},
-  shieldedCells: {},
-  lastMove: null,
   draftOrder: [],
   draftTurnIndex: 0
 };
@@ -1414,10 +1406,11 @@ function renderAbilitiesBar() {
         
         // Моментальный Блицкриг (id: 6) без выбора клетки
         if (abId === 6) {
+          superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
           superMode.usedAbilities[pIdx].push(6);
           superMode.activeAbility = null;
-          // Добавляем виртуальный пустой ход в историю, чтобы сдвинуть и вернуть ход обратно текущему игроку
-          history.push({ cell: -1, player: pIdx }); 
+          // Виртуальный пасс — idx: -1 означает "бонусный ход", не трогает доску
+          history.push({ idx: -1, p: pIdx }); 
           showToast("👟 Блицкриг! +1 Ход");
         }
       }
@@ -1515,6 +1508,7 @@ function executeCellClick(idx, isLocal = false) {
     if (superMode.activeAbility === 0) { // Удар Тора
       if (board[idx] !== "") {
         board[idx] = "";
+        superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
         superMode.usedAbilities[pIdx].push(0);
         superMode.activeAbility = null;
         showToast("💥 Клетка выжжена!");
@@ -1534,6 +1528,7 @@ function executeCellClick(idx, isLocal = false) {
     if (superMode.activeAbility === 1) { // Хакинг
       if (board[idx] !== "" && board[idx] !== SYMBOLS[pIdx]) {
         board[idx] = SYMBOLS[pIdx];
+        superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
         superMode.usedAbilities[pIdx].push(1);
         superMode.activeAbility = null;
         showToast("🔄 Фигура взломана!");
@@ -1607,14 +1602,16 @@ function makeMove(idx, isLocal = false) {
             if (hasHack && !abilityFired) {
               for (let i = 0; i < board.length; i++) {
                 if (board[i] === SYMBOLS[0]) {
+                  const saved = board[i];
                   board[i] = SYMBOLS[1];
-                  if (checkWinSimple(board, settings.size, settings.goal) || p0Threat) {
+                  const wouldWin = checkWinSimple(board, settings.size, settings.goal);
+                  board[i] = saved;
+                  if (wouldWin || p0Threat) {
                     superMode.activeAbility = 1;
                     executeCellClick(i, false);
                     abilityFired = true;
                     break;
                   }
-                  board[i] = SYMBOLS[0];
                 }
               }
             }
@@ -1647,12 +1644,12 @@ function makeMove(idx, isLocal = false) {
 function doUndo() {
   if (!history.length) return;
   const last = history.pop();
-  board[last.idx] = "";
+  if (last.idx !== -1) board[last.idx] = "";
 
   // In AI mode undo two moves (player + AI)
   if (settings.mode === "ai" && history.length > 0) {
     const last2 = history.pop();
-    board[last2.idx] = "";
+    if (last2.idx !== -1) board[last2.idx] = "";
   }
 
   gameOver = false;
@@ -1674,7 +1671,8 @@ function checkWinCondition() {
     Confetti.start();
     
     settings.gamesPlayed = (settings.gamesPlayed || 0) + 1;
-    if (board[winLine[0]] === "X") {
+    const myIdx = network.isActive ? (network.isHost ? 0 : 1) : 0;
+    if (board[winLine[0]] === SYMBOLS[myIdx]) {
       settings.gamesWon = (settings.gamesWon || 0) + 1;
       
       // PvE Progress
@@ -1846,16 +1844,17 @@ function modalConfirm(txt) {
 
     $("modalBack").classList.add("on");
 
-    $("modalOk").onclick = () => {
+    let resolved = false;
+    const guard = (val) => () => {
+      if (resolved) return;
+      resolved = true;
       Sfx.click(settings.sound);
       $("modalBack").classList.remove("on");
-      resolve(true);
+      resolve(val);
     };
-    $("modalCancel").onclick = () => {
-      Sfx.click(settings.sound);
-      $("modalBack").classList.remove("on");
-      resolve(false);
-    };
+
+    $("modalOk").onclick = guard(true);
+    $("modalCancel").onclick = guard(false);
   });
 }
 
@@ -1864,7 +1863,7 @@ function modalConfirm(txt) {
    ───────────────────────────────────────────────────── */
 function saveGameData() {
   saveGame({
-    settingsSnapshot: settings,
+    settingsSnapshot: JSON.parse(JSON.stringify(settings)),
     board,
     history,
     gameOver
@@ -1924,6 +1923,7 @@ function startNetworkHost() {
     $("btnCopyNetLink").style.display = "block";
   });
   
+  if (network.peer) network.peer.removeAllListeners('connection');
   network.peer.on('connection', (incomingConn) => {
     // ЖЕСТКАЯ ФИКСАЦИЯ КАНАЛА ДЛЯ ХОСТА
     network.conn = incomingConn;
@@ -1957,11 +1957,17 @@ function setupConnection(conn) {
           network.conn.send(pkt);
         }
       }, 500);
-      startNewGame();
+      if (settings.matchMode === "super") {
+        $("screenHome").classList.add("hidden");
+        $("screenDraft").classList.remove("hidden");
+        startDraftPhase();
+      } else {
+        startNewGame();
+      }
     }
   });
   
-  conn.off('data');
+  conn.removeAllListeners('data');
   conn.on('data', (data) => {
     pushNetLog('IN', data);
     handleNetworkData(data);
@@ -2008,7 +2014,7 @@ function handleNetworkData(data) {
 
   if (data.type === "MOVE") {
     // Применяем ход соперника локально
-    if (data.abilityId !== null) {
+    if (typeof data.abilityId !== "undefined" && data.abilityId !== null) {
       // Если соперник использовал способность, активируем её у него
       superMode.activeAbility = data.abilityId;
     }
@@ -2022,7 +2028,7 @@ function handleNetworkData(data) {
     const pIdx = data.playerIdx;
     if (!superMode.playerDecks[pIdx].includes(data.abilityId)) {
       superMode.playerDecks[pIdx].push(data.abilityId);
-      superMode.draftTurnIndex++;
+      // draftTurnIndex инкрементируется только на стороне инициатора выбора
       renderDraftGrid();
     }
   }
