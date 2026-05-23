@@ -59,9 +59,9 @@ function isSkinUnlocked(skinId) {
 }
 
 function purchaseWithStars(itemKey, itemType) {
-  // Замените YOUR_BOT_USERNAME на username вашего Telegram бота
+  // Замените на username вашего Telegram бота (не личного аккаунта)
   // Формат: https://t.me/YOUR_BOT_USERNAME?startapp=invoice_<invoice_id>
-  const invoiceUrl = "https://t.me/YOUR_BOT_USERNAME?startapp=gold_theme";
+  const invoiceUrl = "https://t.me/Abdullokh_Yuldoshev?startapp=gold_theme";
   if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openInvoice) {
     window.Telegram.WebApp.openInvoice(invoiceUrl, (status) => {
       if (status === "paid") {
@@ -1777,6 +1777,9 @@ function updateCareerUI() {
    ───────────────────────────────────────────────────── */
 function renderUI() {
   const t = I18N[settings.lang];
+
+  // Update version in settings screen
+  if ($("gameVersion")) $("gameVersion").textContent = "v" + BUILD_VERSION;
 
   $("btnStart").innerHTML        = "▶ " + t.start;
   const btnInfo = $("btnInfo");
