@@ -59,7 +59,9 @@ function isSkinUnlocked(skinId) {
 }
 
 function purchaseWithStars(itemKey, itemType) {
-  const invoiceUrl = "https://t.me/$STARS_INVOICE_PLACEHOLDER";
+  // Замените YOUR_BOT_USERNAME на username вашего Telegram бота
+  // Формат: https://t.me/YOUR_BOT_USERNAME?startapp=invoice_<invoice_id>
+  const invoiceUrl = "https://t.me/YOUR_BOT_USERNAME?startapp=gold_theme";
   if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openInvoice) {
     window.Telegram.WebApp.openInvoice(invoiceUrl, (status) => {
       if (status === "paid") {
@@ -231,7 +233,7 @@ const Confetti = {
    ───────────────────────────────────────────────────── */
 const STORE_KEY = "ttt_settings_liquid_v4";
 const GAME_KEY  = "ttt_game_liquid_v4";
-const BUILD_VERSION = "4.1.0";
+const BUILD_VERSION = "4.2.0";
 
 function defaultSettings() {
   return {
@@ -1162,13 +1164,15 @@ function saveAndApply() {
    ───────────────────────────────────────────────────── */
 function startDraftPhase() {
   const t = I18N[settings.lang];
-  superMode.playerDecks = { 0: [], 1: [], 2: [], 3: [] };
-  superMode.usedAbilities = { 0: [], 1: [], 2: [], 3: [] };
+  // Инициализируем только если ещё не инициализировано (для сетевой синхронизации)
+  if (!superMode.playerDecks[0]) superMode.playerDecks = { 0: [], 1: [], 2: [], 3: [] };
+  if (!superMode.usedAbilities[0]) superMode.usedAbilities = { 0: [], 1: [], 2: [], 3: [] };
   superMode.draftTurnIndex = 0;
   
   superMode.draftOrder = [0, 1];
   if (settings.mode === "p3") superMode.draftOrder = [0, 1, 2];
   if (settings.mode === "p4") superMode.draftOrder = [0, 1, 2, 3];
+  if (settings.mode === "ai") superMode.draftOrder = [0, 1]; // AI всегда 2 игрока
   
   renderDraftGrid();
   startDraftTimer();
@@ -1251,7 +1255,7 @@ function renderDraftGrid() {
     if (draftTimerInterval) { clearInterval(draftTimerInterval); draftTimerInterval = null; }
     $("screenDraft").classList.add("hidden");
     
-    // Полный жесткий сброс игрового поля перед стартом сетевого боя
+    // Полный жесткий сброс игрового поля перед стартом
     board = Array(settings.size * settings.size).fill("");
     history = [];
     gameOver = false;
@@ -1259,6 +1263,11 @@ function renderDraftGrid() {
     
     renderGame();
     return;
+  }
+  
+  // Для AI режима: если игрок выбрал 3 карты, ждём пока бот тоже выберет
+  if (settings.mode === "ai" && hostDeck.length >= 3 && guestDeck.length < 3) {
+    sub.textContent = "🤖 Бот выбирает карты...";
   }
   
   let activePlayerIdx = superMode.draftOrder[superMode.draftTurnIndex % superMode.draftOrder.length];
@@ -1279,8 +1288,19 @@ function renderDraftGrid() {
       for (let i = 0; i < 10; i++) {
         if (!superMode.playerDecks[1].includes(i)) available.push(i);
       }
-      let randomChoice = available[Math.floor(Math.random() * available.length)];
-      superMode.playerDecks[1].push(randomChoice);
+      // AI выбирает более умно: приоритет атакующим способностям (Thor, Hack)
+      const priorityAbilities = [0, 1, 6]; // Thor, Hack, Blitzkrieg
+      let bestChoice = -1;
+      for (let p of priorityAbilities) {
+        if (available.includes(p)) {
+          bestChoice = p;
+          break;
+        }
+      }
+      if (bestChoice === -1) {
+        bestChoice = available[Math.floor(Math.random() * available.length)];
+      }
+      superMode.playerDecks[1].push(bestChoice);
       superMode.draftTurnIndex++;
       renderDraftGrid();
     }, 400);
@@ -1993,9 +2013,11 @@ function handleNetworkData(data) {
     settings.matchMode = data.settings.matchMode;
     settings.mode = "pvp";
 
-    if (data.superDecks) {
-      superMode.playerDecks = data.superDecks;
-    }
+    // Не перезаписываем decks если они уже инициализированы локально
+  // Это предотвращает потерю локального состояния драфта
+  if (data.superDecks && !superMode.playerDecks[0]) {
+    superMode.playerDecks = data.superDecks;
+  }
 
     saveSettings(settings);
     syncSettingsForm();
