@@ -1,7 +1,8 @@
 /**
  * =====================================================================
- * TIC-TAC-TOE LIQUID PREMIUM — js/game.js v3.1.0
- * Monolithic ES-module: Audio, Haptic, Confetti, Storage, AI, Game
+ * TIC-TAC-TOE LIQUID PREMIUM — js/game.js v4.0.0
+ * Monolithic ES-module: Audio, Haptic, Confetti, Storage, AI, Game,
+ * P2P Network, Monetization, Admin Panel
  * =====================================================================
  */
 
@@ -12,6 +13,73 @@ const network = {
   isActive: false,
   roomID: null
 };
+
+/* Лог последних P2P пакетов для админ-монитора */
+const networkLog = [];
+function pushNetLog(direction, data) {
+  networkLog.push({ ts: Date.now(), dir: direction, data });
+  if (networkLog.length > 50) networkLog.shift();
+}
+
+/* ─────────────────────────────────────────────────────
+   PREMIUM SKINS & MONETIZATION
+   ───────────────────────────────────────────────────── */
+const PREMIUM_SKINS = [
+  { id: "neon_fire",    emoji: "🔥", name: "Огонь",    isLocked: true },
+  { id: "neon_diamond", emoji: "💎", name: "Алмаз",    isLocked: true },
+  { id: "neon_bolt",    emoji: "⚡", name: "Молния",   isLocked: true },
+  { id: "neon_star",    emoji: "🌟", name: "Звезда",   isLocked: true }
+];
+
+function isPremiumUnlocked(key) {
+  try { return localStorage.getItem(key) === "true"; } catch(e) { return false; }
+}
+
+function unlockPremium(key) {
+  try { localStorage.setItem(key, "true"); } catch(e) { /* ignore */ }
+}
+
+function getUnlockedSkins() {
+  try {
+    const arr = JSON.parse(localStorage.getItem("unlocked_skins") || "[]");
+    return Array.isArray(arr) ? arr : [];
+  } catch(e) { return []; }
+}
+
+function unlockSkin(skinId) {
+  const skins = getUnlockedSkins();
+  if (!skins.includes(skinId)) {
+    skins.push(skinId);
+    localStorage.setItem("unlocked_skins", JSON.stringify(skins));
+  }
+}
+
+function isSkinUnlocked(skinId) {
+  return getUnlockedSkins().includes(skinId);
+}
+
+function purchaseWithStars(itemKey, itemType) {
+  const invoiceUrl = "https://t.me/$STARS_INVOICE_PLACEHOLDER";
+  if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openInvoice) {
+    window.Telegram.WebApp.openInvoice(invoiceUrl, (status) => {
+      if (status === "paid") {
+        if (itemType === "theme") {
+          unlockPremium(itemKey);
+          showToast("✅ Тема разблокирована!");
+        } else if (itemType === "skin") {
+          unlockSkin(itemKey);
+          showToast("✅ Скин разблокирован!");
+        }
+        renderUI();
+        syncSettingsForm();
+      } else {
+        showToast("❌ Оплата отменена");
+      }
+    });
+  } else {
+    showToast("⭐️ Оплата доступна только в Telegram");
+  }
+}
 
 /* ─────────────────────────────────────────────────────
    AUDIO SUBSYSTEM (Web Audio API)
@@ -163,7 +231,7 @@ const Confetti = {
    ───────────────────────────────────────────────────── */
 const STORE_KEY = "ttt_settings_liquid_v3";
 const GAME_KEY  = "ttt_game_liquid_v3";
-const BUILD_VERSION = "3.1.0";
+const BUILD_VERSION = "4.0.0";
 
 function defaultSettings() {
   return {
@@ -794,7 +862,17 @@ function init() {
   document.querySelectorAll(".btn-theme-item").forEach(btn => {
     btn.onclick = () => {
       Sfx.click(settings.sound);
-      settings.theme = btn.getAttribute("data-theme");
+      const chosenTheme = btn.getAttribute("data-theme");
+      
+      // Gold theme premium lock
+      if (chosenTheme === "gold" && !isPremiumUnlocked("gold_theme_unlocked")) {
+        showToast("⭐️ Золотая тема заблокирована. Купите за Telegram Stars!");
+        purchaseWithStars("gold_theme_unlocked", "theme");
+        $("themeMenu").classList.add("hidden");
+        return;
+      }
+      
+      settings.theme = chosenTheme;
       saveSettings(settings);
       $("themeMenu").classList.add("hidden");
       applyTheme();
@@ -859,6 +937,64 @@ function init() {
     go("game");
   } else {
     go("home");
+  }
+
+  /* ── Admin Panel ── */
+  if ($("btnDevPanel")) {
+    $("btnDevPanel").onclick = (e) => {
+      e.preventDefault();
+      Sfx.click(settings.sound);
+      $("adminModal").classList.remove("hidden");
+      $("adminLoginScreen").classList.remove("hidden");
+      $("adminDashboard").classList.add("hidden");
+      if ($("adminLoginInput")) $("adminLoginInput").value = "";
+      if ($("adminPassInput")) $("adminPassInput").value = "";
+    };
+  }
+
+  if ($("adminLoginBtn")) {
+    $("adminLoginBtn").onclick = () => {
+      const login = $("adminLoginInput").value.trim();
+      const pass = $("adminPassInput").value.trim();
+      if (login === "alex" && pass === "liquid4ever") {
+        $("adminLoginScreen").classList.add("hidden");
+        $("adminDashboard").classList.remove("hidden");
+        refreshAdminMonitor();
+      } else {
+        showToast("❌ Неверный логин или пароль");
+      }
+    };
+  }
+
+  if ($("adminUnlockAll")) {
+    $("adminUnlockAll").onclick = () => {
+      unlockPremium("gold_theme_unlocked");
+      PREMIUM_SKINS.forEach(s => unlockSkin(s.id));
+      showToast("✅ Всё разблокировано!");
+      renderUI();
+    };
+  }
+
+  if ($("adminClearStorage")) {
+    $("adminClearStorage").onclick = () => {
+      localStorage.clear();
+      showToast("🗑️ localStorage очищен");
+      settings = defaultSettings();
+      renderUI();
+      syncSettingsForm();
+    };
+  }
+
+  if ($("adminRefreshNet")) {
+    $("adminRefreshNet").onclick = () => {
+      refreshAdminMonitor();
+    };
+  }
+
+  if ($("adminCloseBtn")) {
+    $("adminCloseBtn").onclick = () => {
+      $("adminModal").classList.add("hidden");
+    };
   }
 }
 
@@ -1078,11 +1214,13 @@ function startDraftTimer() {
       }
       
       if (network.isActive && network.conn && network.conn.open) {
-        network.conn.send({
+        const pkt = {
           type: "PLAYER_READY",
           playerIdx: myIdx,
           deck: superMode.playerDecks[myIdx]
-        });
+        };
+        pushNetLog('OUT', pkt);
+        network.conn.send(pkt);
       }
       
       renderDraftGrid();
@@ -1106,11 +1244,13 @@ function renderDraftGrid() {
   if (superMode.playerDecks[myIdx] && superMode.playerDecks[myIdx].length >= 3) {
     sub.textContent = "Ожидание соперника...";
     if (network.isActive && network.conn && network.conn.open) {
-      network.conn.send({
+      const pkt = {
         type: "PLAYER_READY",
         playerIdx: myIdx,
         deck: superMode.playerDecks[myIdx]
-      });
+      };
+      pushNetLog('OUT', pkt);
+      network.conn.send(pkt);
     }
   }
 
@@ -1158,19 +1298,17 @@ function renderDraftGrid() {
   // Рендер 10 карточек в стиле Монополии
   t.abilitiesData.forEach((ab, idx) => {
     const card = document.createElement("div");
-    // Делаем элемент списком во всю ширину
     card.className = "ability-card";
     card.style.display = "flex";
     card.style.flexDirection = "row";
     card.style.alignItems = "center";
     card.style.width = "100%";
-    card.style.marginHeight = "6px";
     card.style.background = "var(--glass-bg)";
     card.style.border = "1px solid var(--glass-border)";
     card.style.borderRadius = "12px";
     card.style.padding = "10px 14px";
-    card.style.gap = "0px";
     card.style.textAlign = "left";
+    card.style.boxSizing = "border-box";
 
     if (superMode.playerDecks[activePlayerIdx].includes(idx)) {
       card.style.opacity = "0.4";
@@ -1178,7 +1316,7 @@ function renderDraftGrid() {
     }
 
     card.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 55px; width: 55px; flex-shrink: 0; margin-right: 16px; box-sizing: border-box;">
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 60px; min-width: 60px; flex-shrink: 0; margin-right: 16px; box-sizing: border-box; text-align: center;">
         <span style="font-size: 24px; line-height: 1; display: block; margin-bottom: 3px;">${ab.emoji}</span>
         <span class="cat-${ab.cat}" style="font-size: 8px; font-weight: 900; padding: 2px 0; border-radius: 4px; color: #fff; text-transform: uppercase; display: block; text-align: center; width: 100%; box-sizing: border-box; line-height: 1.2;">${ab.cat}</span>
       </div>
@@ -1201,11 +1339,13 @@ function renderDraftGrid() {
       superMode.playerDecks[activePlayerIdx].push(idx);
       
       if (network.isActive && network.conn && network.conn.open) {
-        network.conn.send({
+        const pkt = {
           type: "DRAFT_SELECT",
           playerIdx: activePlayerIdx,
           abilityId: idx
-        });
+        };
+        pushNetLog('OUT', pkt);
+        network.conn.send(pkt);
       }
       
       superMode.draftTurnIndex++;
@@ -1379,7 +1519,9 @@ function executeCellClick(idx, isLocal = false) {
         showToast("💥 Клетка выжжена!");
         
         if (isLocal && network.isActive && network.conn && network.conn.open) {
-          network.conn.send({ type: "MOVE", cellIndex: idx, abilityId: abilityUsed });
+          const pkt = { type: "MOVE", cellIndex: idx, abilityId: abilityUsed };
+          pushNetLog('OUT', pkt);
+          network.conn.send(pkt);
         }
         
         renderGame();
@@ -1396,7 +1538,9 @@ function executeCellClick(idx, isLocal = false) {
         showToast("🔄 Фигура взломана!");
         
         if (isLocal && network.isActive && network.conn && network.conn.open) {
-          network.conn.send({ type: "MOVE", cellIndex: idx, abilityId: abilityUsed });
+          const pkt = { type: "MOVE", cellIndex: idx, abilityId: abilityUsed };
+          pushNetLog('OUT', pkt);
+          network.conn.send(pkt);
         }
         
         renderGame();
@@ -1423,11 +1567,13 @@ function makeMove(idx, isLocal = false) {
   history.push({ idx, p: pIdx });
 
   if (isLocal && network.isActive && network.conn && network.conn.open) {
-    network.conn.send({
+    const pkt = {
       type: "MOVE",
       cellIndex: idx,
-      abilityId: superMode.activeAbility // if any active ability that wasn't consumed
-    });
+      abilityId: superMode.activeAbility
+    };
+    pushNetLog('OUT', pkt);
+    network.conn.send(pkt);
   }
 
   checkWinCondition();
@@ -1668,6 +1814,11 @@ function renderUI() {
    THEME
    ───────────────────────────────────────────────────── */
 function applyTheme() {
+  // Guard: If Gold is selected but not unlocked, fall back to light
+  if (settings.theme === "gold" && !isPremiumUnlocked("gold_theme_unlocked")) {
+    settings.theme = "light";
+    saveSettings(settings);
+  }
   document.documentElement.setAttribute("data-theme", settings.theme);
 }
 
@@ -1796,20 +1947,22 @@ function setupConnection(conn) {
       // Хост мгновенно отправляет свои настройки гостю
       setTimeout(() => {
         if (network.conn && network.conn.open) {
-          network.conn.send({
+          const pkt = {
             type: "START_CONFIG",
             settings: settings,
             superDecks: superMode.playerDecks
-          });
+          };
+          pushNetLog('OUT', pkt);
+          network.conn.send(pkt);
         }
       }, 500);
       startNewGame();
     }
   });
   
-  // Принудительно очищаем старые слушатели перед привязкой новых
   conn.off('data');
   conn.on('data', (data) => {
+    pushNetLog('IN', data);
     handleNetworkData(data);
   });
   
@@ -1839,7 +1992,16 @@ function handleNetworkData(data) {
 
     saveSettings(settings);
     syncSettingsForm();
-    startNewGame();
+    
+    // If super mode, open draft screen instead of jumping to game
+    if (settings.matchMode === "super") {
+      $("screenHome").classList.add("hidden");
+      $("screenSettings").classList.add("hidden");
+      $("screenDraft").classList.remove("hidden");
+      startDraftPhase();
+    } else {
+      startNewGame();
+    }
     return;
   }
 
@@ -1870,6 +2032,39 @@ function handleNetworkData(data) {
     renderDraftGrid(); // Перерисовываем, чтобы сработал триггер старта игры
     return;
   }
+}
+
+/* ─────────────────────────────────────────────────────
+   ADMIN PANEL MONITOR
+   ───────────────────────────────────────────────────── */
+function refreshAdminMonitor() {
+  const monEl = $("adminNetMonitor");
+  if (!monEl) return;
+
+  const peerStatus = network.peer ? (network.peer.destroyed ? "destroyed" : (network.peer.disconnected ? "disconnected" : "alive")) : "null";
+  const connStatus = network.conn ? (network.conn.open ? "open" : "closed") : "null";
+
+  let html = `<div style="font-size:12px; font-family:monospace; color:var(--text); text-align:left;">`;
+  html += `<b>Room ID:</b> ${network.roomID || "—"}<br>`;
+  html += `<b>Role:</b> ${network.isActive ? (network.isHost ? "HOST" : "GUEST") : "OFFLINE"}<br>`;
+  html += `<b>Peer:</b> ${peerStatus}<br>`;
+  html += `<b>Conn:</b> ${connStatus}<br>`;
+  html += `<hr style="border-color:rgba(255,255,255,0.1); margin:6px 0;">`;
+  html += `<b>Last ${Math.min(networkLog.length, 10)} packets:</b><br>`;
+
+  const recent = networkLog.slice(-10).reverse();
+  if (recent.length === 0) {
+    html += `<i style="opacity:0.5;">No packets yet</i>`;
+  } else {
+    recent.forEach(entry => {
+      const dir = entry.dir === "IN" ? "📥" : "📤";
+      const type = entry.data?.type || "?";
+      const time = new Date(entry.ts).toLocaleTimeString();
+      html += `${dir} <b>${type}</b> @ ${time}<br>`;
+    });
+  }
+  html += `</div>`;
+  monEl.innerHTML = html;
 }
 
 /* ─────────────────────────────────────────────────────
