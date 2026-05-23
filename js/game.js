@@ -1309,6 +1309,7 @@ function renderDraftGrid() {
     card.style.padding = "10px 14px";
     card.style.textAlign = "left";
     card.style.boxSizing = "border-box";
+    card.style.gap = "0px";
 
     if (superMode.playerDecks[activePlayerIdx].includes(idx)) {
       card.style.opacity = "0.4";
