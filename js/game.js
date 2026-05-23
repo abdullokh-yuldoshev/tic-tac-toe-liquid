@@ -673,6 +673,7 @@ let board    = [];
 let history  = [];
 let gameOver = false;
 let winLine  = [];
+let draftTimerInterval = null;
 
 /* ─────────────────────────────────────────────────────
    DOM REFERENCES (declared once, after DOMContentLoaded)
@@ -1042,6 +1043,41 @@ function startDraftPhase() {
   if (settings.mode === "p4") superMode.draftOrder = [0, 1, 2, 3];
   
   renderDraftGrid();
+  startDraftTimer();
+}
+
+function startDraftTimer() {
+  if (draftTimerInterval) clearInterval(draftTimerInterval);
+  let timeLeft = 20;
+  const el = $("draftTimerNum");
+  if (el) el.textContent = timeLeft;
+  
+  draftTimerInterval = setInterval(() => {
+    timeLeft--;
+    if (el) el.textContent = timeLeft;
+    
+    if (timeLeft <= 0) {
+      clearInterval(draftTimerInterval);
+      draftTimerInterval = null;
+      
+      // Auto-fill missing abilities
+      for (let p of superMode.draftOrder) {
+        let deck = superMode.playerDecks[p] || [];
+        let available = [];
+        for (let i = 0; i < 10; i++) {
+          if (!deck.includes(i)) available.push(i);
+        }
+        while (deck.length < 3 && available.length > 0) {
+          let r = Math.floor(Math.random() * available.length);
+          deck.push(available[r]);
+          available.splice(r, 1);
+        }
+      }
+      
+      $("screenDraft").classList.add("hidden");
+      startNewGame();
+    }
+  }, 1000);
 }
 
 function renderDraftGrid() {
@@ -1056,6 +1092,7 @@ function renderDraftGrid() {
   let currentTotal = Object.values(superMode.playerDecks).reduce((a, b) => a + b.length, 0);
   
   if (currentTotal >= totalNeeded) {
+    if (draftTimerInterval) clearInterval(draftTimerInterval);
     $("screenDraft").classList.add("hidden");
     startNewGame();
     return;
@@ -1268,9 +1305,9 @@ function renderGame() {
 
     c.onclick = () => {
       if (network.isActive) {
-        let currentTurnIdx = history.length % getPlayersCount();
-        if (network.isHost && currentTurnIdx !== 0) { showToast("Сейчас ход соперника!"); return; }
-        if (!network.isHost && currentTurnIdx !== 1) { showToast("Сейчас ход соперника!"); return; }
+        let currentSymbol = SYMBOLS[history.length % getPlayersCount()];
+        if (network.isHost && currentSymbol !== "X") { showToast("Сейчас ход соперника!"); return; }
+        if (!network.isHost && currentSymbol !== "O") { showToast("Сейчас ход соперника!"); return; }
       }
       executeCellClick(idx, true);
     };
@@ -1492,8 +1529,15 @@ function getPlayersCount() {
 }
 
 function getPlayerName(idx) {
-  if (idx === 0) return settings.p1;
-  if (idx === 1) return settings.mode === "ai" ? "AI" : settings.p2;
+  if (network.isActive) {
+    if (network.isHost) {
+      return idx === 0 ? "👑 Игрок 1 (Вы)" : "⚡ Игрок 2 (Соперник)";
+    } else {
+      return idx === 1 ? "👑 Игрок 1 (Вы)" : "⚡ Игрок 2 (Соперник)";
+    }
+  }
+  if (idx === 0) return "👑 " + settings.p1;
+  if (idx === 1) return settings.mode === "ai" ? "🤖 AI" : "⚡ " + settings.p2;
   if (idx === 2) return settings.p3;
   if (idx === 3) return settings.p4;
   return "Player";
