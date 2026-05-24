@@ -792,7 +792,7 @@ var superMode = {
 
 var settings = loadSettings();
 var board    = [];
-var history  = [];
+var moveHistory  = [];
 var gameOver = false;
 var winLine  = [];
 var draftTimerInterval = null;
@@ -824,7 +824,7 @@ function init() {
   var savedGame = loadGame();
   if (savedGame && savedGame.board && savedGame.board.length > 0 && !savedGame.gameOver) {
     board    = savedGame.board;
-    history  = savedGame.history || [];
+    moveHistory  = savedGame.history || [];
     gameOver = savedGame.gameOver;
     settings = Object.assign({}, defaultSettings(), savedGame.settingsSnapshot);
     renderGame();
@@ -1304,7 +1304,7 @@ function renderDraftGrid() {
     if (draftTimerInterval) { clearInterval(draftTimerInterval); draftTimerInterval = null; }
     DOM.screenDraft.classList.add("hidden");
     board = Array(settings.size * settings.size).fill("");
-    history = [];
+    moveHistory = [];
     gameOver = false;
     winLine = [];
     renderGame();
@@ -1408,7 +1408,7 @@ function renderAbilitiesBar() {
   if (settings.matchMode !== "super" || gameOver) return;
 
   var t = I18N[settings.lang];
-  var pIdx = history.length % getPlayersCount();
+  var pIdx = moveHistory.length % getPlayersCount();
   var deck = superMode.playerDecks[pIdx] || [];
 
   deck.forEach(function (abId) {
@@ -1458,7 +1458,7 @@ function renderAbilitiesBar() {
           superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
           superMode.usedAbilities[pIdx].push(6);
           superMode.activeAbility = null;
-          history.push({ idx: -1, p: pIdx });
+          moveHistory.push({ idx: -1, p: pIdx });
           showToast("\uD83D\uDC5F \u0411\u043B\u0438\u0446\u043A\u0440\u0438\u0433! +1 \u0425\u043E\u0434");
         }
       }
@@ -1474,7 +1474,7 @@ function renderAbilitiesBar() {
    ───────────────────────────────────────────────────── */
 function startNewGame() {
   board    = Array(settings.size * settings.size).fill("");
-  history  = [];
+  moveHistory  = [];
   gameOver = false;
   winLine  = [];
   saveGameData();
@@ -1532,7 +1532,7 @@ function renderGame() {
       c.onclick = function () {
         // P2P turn validation by symbol (Host=X, Guest=O)
         if (network.isActive) {
-          var currentSymbol = SYMBOLS[history.length % getPlayersCount()];
+          var currentSymbol = SYMBOLS[moveHistory.length % getPlayersCount()];
           if (network.isHost && currentSymbol !== "X") {
             showToast("\u0421\u0435\u0439\u0447\u0430\u0441 \u0445\u043E\u0434 \u0441\u043E\u043F\u0435\u0440\u043D\u0438\u043A\u0430!");
             return;
@@ -1553,7 +1553,7 @@ function renderGame() {
   bEl.appendChild(frag);
 
   // Turn info
-  var curP  = history.length % getPlayersCount();
+  var curP  = moveHistory.length % getPlayersCount();
   var pName = getPlayerName(curP);
 
   if (gameOver) {
@@ -1567,7 +1567,7 @@ function renderGame() {
   }
 
   DOM.turnSub.textContent = t.sub(settings.size, settings.goal);
-  DOM.btnUndo.disabled     = (history.length === 0 || gameOver);
+  DOM.btnUndo.disabled     = (moveHistory.length === 0 || gameOver);
   DOM.btnUndo.style.opacity = DOM.btnUndo.disabled ? "0.45" : "1";
 
   renderAbilitiesBar();
@@ -1580,7 +1580,7 @@ function executeCellClick(idx, isLocal) {
   isLocal = isLocal !== false;
 
   if (settings.matchMode === "super" && superMode.activeAbility !== null) {
-    var pIdx = history.length % getPlayersCount();
+    var pIdx = moveHistory.length % getPlayersCount();
     var abilityUsed = superMode.activeAbility;
     superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
 
@@ -1639,9 +1639,9 @@ function makeMove(idx, isLocal) {
   Sfx.pop(settings.sound);
   Haptic.trigger("light");
 
-  var pIdx  = history.length % getPlayersCount();
+  var pIdx  = moveHistory.length % getPlayersCount();
   board[idx] = SYMBOLS[pIdx];
-  history.push({ idx: idx, p: pIdx });
+  moveHistory.push({ idx: idx, p: pIdx });
 
   // Decrement frozen cell counters
   if (superMode.frozenCells) {
@@ -1670,7 +1670,7 @@ function makeMove(idx, isLocal) {
 
   // AI's turn
   if (!gameOver && settings.mode === "ai" && getPlayersCount() === 2) {
-    if ((history.length % 2) === 1) {
+    if ((moveHistory.length % 2) === 1) {
       setTimeout(function () {
         // AI Super Mode: evaluate abilities using localized simulation
         if (settings.matchMode === "super") {
@@ -1739,14 +1739,14 @@ function makeMove(idx, isLocal) {
    GAME: UNDO (skips Blitzkrieg idx:-1 entries)
    ───────────────────────────────────────────────────── */
 function doUndo() {
-  if (!history.length) return;
+  if (!moveHistory.length) return;
 
-  var last = history.pop();
+  var last = moveHistory.pop();
   if (last.idx !== -1) board[last.idx] = "";
 
   // In AI mode undo two moves (player + AI)
-  if (settings.mode === "ai" && history.length > 0) {
-    var last2 = history.pop();
+  if (settings.mode === "ai" && moveHistory.length > 0) {
+    var last2 = moveHistory.pop();
     if (last2.idx !== -1) board[last2.idx] = "";
   }
 
@@ -1965,7 +1965,7 @@ function saveGameData() {
   saveGame({
     settingsSnapshot: JSON.parse(JSON.stringify(settings)),
     board: board,
-    history: history,
+    history: moveHistory,
     gameOver: gameOver
   });
 }
