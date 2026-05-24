@@ -1,11 +1,28 @@
 /**
  * =====================================================================
- * TIC-TAC-TOE LIQUID PREMIUM — js/game.js v4.0.0
- * Monolithic ES-module: Audio, Haptic, Confetti, Storage, AI, Game,
- * P2P Network, Monetization, Admin Panel
+ * TIC-TAC-TOE LIQUID PREMIUM — js/game.js v4.5.0
+ * Clean Monolith Reboot
+ *
+ * Subsystems: Audio, Haptic, Confetti, Storage, AI, Game Engine,
+ *             P2P Network (PeerJS/WebRTC), Super Mode Draft,
+ *             Monetization, Admin Panel
+ *
+ * Architecture Rules:
+ *   - Zero Layout Thrashing (batched renders via requestAnimationFrame)
+ *   - Cached DOM references (resolved once at bootstrap)
+ *   - Deep-clone snapshots via JSON.parse(JSON.stringify())
+ *   - Zero external audio files (Web Audio API oscillators only)
+ *   - Rolling 50-packet P2P diagnostic log
  * =====================================================================
  */
 
+const BUILD_VERSION = "4.5.0";
+const STORE_KEY     = "ttt_settings_liquid_v4";
+const GAME_KEY      = "ttt_game_liquid_v4";
+
+/* ─────────────────────────────────────────────────────
+   P2P NETWORK STATE
+   ───────────────────────────────────────────────────── */
 const network = {
   peer: null,
   conn: null,
@@ -14,10 +31,9 @@ const network = {
   roomID: null
 };
 
-/* Лог последних P2P пакетов для админ-монитора */
 const networkLog = [];
 function pushNetLog(direction, data) {
-  networkLog.push({ ts: Date.now(), dir: direction, data });
+  networkLog.push({ ts: Date.now(), dir: direction, data: JSON.parse(JSON.stringify(data)) });
   if (networkLog.length > 50) networkLog.shift();
 }
 
@@ -25,25 +41,25 @@ function pushNetLog(direction, data) {
    PREMIUM SKINS & MONETIZATION
    ───────────────────────────────────────────────────── */
 const PREMIUM_SKINS = [
-  { id: "neon_fire",    emoji: "🔥", name: "Огонь",    isLocked: true },
-  { id: "neon_diamond", emoji: "💎", name: "Алмаз",    isLocked: true },
-  { id: "neon_bolt",    emoji: "⚡", name: "Молния",   isLocked: true },
-  { id: "neon_star",    emoji: "🌟", name: "Звезда",   isLocked: true }
+  { id: "neon_fire",    emoji: "\uD83D\uDD25", name: "\u041E\u0433\u043E\u043D\u044C",    isLocked: true },
+  { id: "neon_diamond", emoji: "\uD83D\uDC8E", name: "\u0410\u043B\u043C\u0430\u0437",    isLocked: true },
+  { id: "neon_bolt",    emoji: "\u26A1",        name: "\u041C\u043E\u043B\u043D\u0438\u044F",   isLocked: true },
+  { id: "neon_star",    emoji: "\uD83C\uDF1F",  name: "\u0417\u0432\u0435\u0437\u0434\u0430",   isLocked: true }
 ];
 
 function isPremiumUnlocked(key) {
-  try { return localStorage.getItem(key) === "true"; } catch(e) { return false; }
+  try { return localStorage.getItem(key) === "true"; } catch (e) { return false; }
 }
 
 function unlockPremium(key) {
-  try { localStorage.setItem(key, "true"); } catch(e) { /* ignore */ }
+  try { localStorage.setItem(key, "true"); } catch (e) { /* noop */ }
 }
 
 function getUnlockedSkins() {
   try {
     const arr = JSON.parse(localStorage.getItem("unlocked_skins") || "[]");
     return Array.isArray(arr) ? arr : [];
-  } catch(e) { return []; }
+  } catch (e) { return []; }
 }
 
 function unlockSkin(skinId) {
@@ -59,32 +75,30 @@ function isSkinUnlocked(skinId) {
 }
 
 function purchaseWithStars(itemKey, itemType) {
-  // Замените на username вашего Telegram бота (не личного аккаунта)
-  // Формат: https://t.me/YOUR_BOT_USERNAME?startapp=invoice_<invoice_id>
-  const invoiceUrl = "https://t.me/Abdullokh_Yuldoshev?startapp=gold_theme";
+  const invoiceUrl = "https://t.me/$STARS_INVOICE_PLACEHOLDER";
   if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openInvoice) {
-    window.Telegram.WebApp.openInvoice(invoiceUrl, (status) => {
+    window.Telegram.WebApp.openInvoice(invoiceUrl, function (status) {
       if (status === "paid") {
         if (itemType === "theme") {
           unlockPremium(itemKey);
-          showToast("✅ Тема разблокирована!");
+          showToast("\u2705 \u0422\u0435\u043C\u0430 \u0440\u0430\u0437\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u0430!");
         } else if (itemType === "skin") {
           unlockSkin(itemKey);
-          showToast("✅ Скин разблокирован!");
+          showToast("\u2705 \u0421\u043A\u0438\u043D \u0440\u0430\u0437\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D!");
         }
         renderUI();
         syncSettingsForm();
       } else {
-        showToast("❌ Оплата отменена");
+        showToast("\u274C \u041E\u043F\u043B\u0430\u0442\u0430 \u043E\u0442\u043C\u0435\u043D\u0435\u043D\u0430");
       }
     });
   } else {
-    showToast("⭐️ Оплата доступна только в Telegram");
+    showToast("\u2B50\uFE0F \u041E\u043F\u043B\u0430\u0442\u0430 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430 \u0442\u043E\u043B\u044C\u043A\u043E \u0432 Telegram");
   }
 }
 
 /* ─────────────────────────────────────────────────────
-   AUDIO SUBSYSTEM (Web Audio API)
+   AUDIO SUBSYSTEM (Web Audio API — zero external files)
    ───────────────────────────────────────────────────── */
 const Sfx = {
   ctx: null,
@@ -93,25 +107,22 @@ const Sfx = {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     }
-    if (this.ctx.state === 'suspended') {
+    if (this.ctx.state === "suspended") {
       this.ctx.resume();
     }
   },
 
-  playTone(freq, type, duration, vol = 0.1) {
+  playTone(freq, type, duration, vol) {
     if (!this.ctx) return;
-    const osc  = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
+    vol = vol || 0.1;
+    var osc  = this.ctx.createOscillator();
+    var gain = this.ctx.createGain();
     osc.type = type;
     osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-
     gain.gain.setValueAtTime(vol, this.ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-
     osc.connect(gain);
     gain.connect(this.ctx.destination);
-
     osc.start();
     osc.stop(this.ctx.currentTime + duration);
   },
@@ -119,39 +130,59 @@ const Sfx = {
   pop(soundEnabled) {
     if (!soundEnabled) return;
     this.init();
-    this.playTone(600, 'sine', 0.1, 0.15);
-    setTimeout(() => this.playTone(800, 'sine', 0.1, 0.1), 50);
+    this.playTone(600, "sine", 0.1, 0.15);
+    setTimeout(function () { Sfx.playTone(800, "sine", 0.1, 0.1); }, 50);
   },
 
   click(soundEnabled) {
     if (!soundEnabled) return;
     this.init();
-    this.playTone(400, 'triangle', 0.05, 0.05);
+    this.playTone(400, "triangle", 0.05, 0.05);
   },
 
   win(soundEnabled) {
     if (!soundEnabled) return;
     this.init();
-    [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => {
-      setTimeout(() => this.playTone(f, 'sine', 0.4, 0.2), i * 120);
+    var freqs = [523.25, 659.25, 783.99, 1046.50];
+    freqs.forEach(function (f, i) {
+      setTimeout(function () { Sfx.playTone(f, "sine", 0.4, 0.2); }, i * 120);
+    });
+  },
+
+  lose(soundEnabled) {
+    if (!soundEnabled) return;
+    this.init();
+    var freqs = [400, 350, 300, 250];
+    freqs.forEach(function (f, i) {
+      setTimeout(function () { Sfx.playTone(f, "sawtooth", 0.3, 0.12); }, i * 150);
     });
   }
 };
 
 /* ─────────────────────────────────────────────────────
-   HAPTIC FEEDBACK
+   HAPTIC FEEDBACK (Navigator + Telegram WebApp)
    ───────────────────────────────────────────────────── */
 const Haptic = {
-  trigger(type = 'light') {
+  trigger(type) {
+    type = type || "light";
+    // Telegram WebApp Taptic Engine
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+      var tg = window.Telegram.WebApp.HapticFeedback;
+      if (type === "light")  tg.impactOccurred("light");
+      if (type === "medium") tg.impactOccurred("medium");
+      if (type === "heavy")  tg.impactOccurred("heavy");
+      return;
+    }
+    // Standard mobile vibration fallback
     if (!navigator.vibrate) return;
-    if (type === 'light')  navigator.vibrate(5);
-    if (type === 'medium') navigator.vibrate(15);
-    if (type === 'heavy')  navigator.vibrate([20, 30, 20]);
+    if (type === "light")  navigator.vibrate(5);
+    if (type === "medium") navigator.vibrate(15);
+    if (type === "heavy")  navigator.vibrate([20, 30, 20]);
   }
 };
 
 /* ─────────────────────────────────────────────────────
-   CONFETTI ANIMATION
+   CONFETTI ANIMATION (Canvas Particle System)
    ───────────────────────────────────────────────────── */
 const Confetti = {
   canvas: null,
@@ -162,8 +193,8 @@ const Confetti = {
   init(canvasId) {
     this.canvas = document.getElementById(canvasId);
     if (!this.canvas) return;
-    this.ctx = this.canvas.getContext('2d');
-    window.addEventListener('resize', () => this.resize());
+    this.ctx = this.canvas.getContext("2d");
+    window.addEventListener("resize", function () { Confetti.resize(); });
     this.resize();
   },
 
@@ -177,9 +208,8 @@ const Confetti = {
     if (!this.canvas || !this.ctx) return;
     this.resize();
     this.particles = [];
-
-    const colors = ['#00C6FF', '#0072FF', '#FF9500', '#FF2D55', '#AF52DE', '#FFD700', '#F5B041'];
-    for (let i = 0; i < 120; i++) {
+    var colors = ["#00C6FF", "#0072FF", "#FF9500", "#FF2D55", "#AF52DE", "#FFD700", "#F5B041"];
+    for (var i = 0; i < 120; i++) {
       this.particles.push({
         x:     this.canvas.width  / 2,
         y:     this.canvas.height / 2,
@@ -192,67 +222,60 @@ const Confetti = {
         rotV:  (Math.random() - 0.5) * 0.2
       });
     }
-
     if (!this.animId) this.loop();
   },
 
   loop() {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    let active = false;
-
-    this.particles.forEach(p => {
+    var self = this;
+    self.ctx.clearRect(0, 0, self.canvas.width, self.canvas.height);
+    var active = false;
+    self.particles.forEach(function (p) {
       p.x   += p.vx;
       p.y   += p.vy;
-      p.vy  += 0.35; // gravity
+      p.vy  += 0.35;
       p.rot += p.rotV;
       p.life -= 0.013;
-
       if (p.life > 0) {
         active = true;
-        this.ctx.save();
-        this.ctx.globalAlpha = p.life;
-        this.ctx.fillStyle   = p.color;
-        this.ctx.translate(p.x, p.y);
-        this.ctx.rotate(p.rot);
-        this.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
-        this.ctx.restore();
+        self.ctx.save();
+        self.ctx.globalAlpha = p.life;
+        self.ctx.fillStyle   = p.color;
+        self.ctx.translate(p.x, p.y);
+        self.ctx.rotate(p.rot);
+        self.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+        self.ctx.restore();
       }
     });
-
     if (active) {
-      this.animId = requestAnimationFrame(() => this.loop());
+      self.animId = requestAnimationFrame(function () { self.loop(); });
     } else {
-      this.animId = null;
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      self.animId = null;
+      self.ctx.clearRect(0, 0, self.canvas.width, self.canvas.height);
     }
   }
 };
 
 /* ─────────────────────────────────────────────────────
-   LOCAL STORAGE HELPERS
+   LOCAL STORAGE HELPERS (deep-clone safety)
    ───────────────────────────────────────────────────── */
-const STORE_KEY = "ttt_settings_liquid_v4";
-const GAME_KEY  = "ttt_game_liquid_v4";
-const BUILD_VERSION = "4.2.0";
-
 function defaultSettings() {
   return {
-    lang:  "ru",
+    lang: "ru",
     theme: "light",
     matchMode: "classic",
-    mode:  "pvp",
-    size:  3,
-    goal:  3,
-    ai:    "expert",
-    p1:    "Игрок 1",
-    p2:    "Игрок 2",
-    p3:    "Игрок 3",
-    p4:    "Игрок 4",
+    mode: "pvp",
+    size: 3,
+    goal: 3,
+    ai: "expert",
+    p1: "\u0418\u0433\u0440\u043E\u043A 1",
+    p2: "\u0418\u0433\u0440\u043E\u043A 2",
+    p3: "\u0418\u0433\u0440\u043E\u043A 3",
+    p4: "\u0418\u0433\u0440\u043E\u043A 4",
     sound: true,
-    sym1:  "X",
-    sym2:  "O",
-    sym3:  "△",
-    sym4:  "□",
+    sym1: "X",
+    sym2: "O",
+    sym3: "\u25B3",
+    sym4: "\u25A1",
     gamesPlayed: 0,
     gamesWon: 0,
     pveLevel: 1,
@@ -262,9 +285,9 @@ function defaultSettings() {
 
 function loadSettings() {
   try {
-    const s = JSON.parse(localStorage.getItem(STORE_KEY));
-    if (s) return { ...defaultSettings(), ...s };
-  } catch (e) { /* ignore */ }
+    var s = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (s) return Object.assign({}, defaultSettings(), s);
+  } catch (e) { /* noop */ }
   return defaultSettings();
 }
 
@@ -281,31 +304,27 @@ function loadGame() {
 }
 
 function saveGame(gameState) {
-  localStorage.setItem(GAME_KEY, JSON.stringify({
-    version: BUILD_VERSION,
-    ...gameState
-  }));
+  localStorage.setItem(GAME_KEY, JSON.stringify(
+    Object.assign({ version: BUILD_VERSION }, gameState)
+  ));
 }
 
 /* ─────────────────────────────────────────────────────
-   AI ENGINE
+   AI ENGINE — TACTICAL BRAIN
    ───────────────────────────────────────────────────── */
 
-/**
- * Full win-check — returns { win: bool, line: [] }
- */
 function checkWinFull(b, sz, goal) {
-  const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
-  for (let r = 0; r < sz; r++) {
-    for (let c = 0; c < sz; c++) {
-      const start = b[r * sz + c];
+  var dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+  for (var r = 0; r < sz; r++) {
+    for (var c = 0; c < sz; c++) {
+      var start = b[r * sz + c];
       if (!start) continue;
-
-      for (const d of dirs) {
-        const line = [];
-        for (let k = 0; k < goal; k++) {
-          const nr = r + d[0] * k;
-          const nc = c + d[1] * k;
+      for (var di = 0; di < dirs.length; di++) {
+        var d = dirs[di];
+        var line = [];
+        for (var k = 0; k < goal; k++) {
+          var nr = r + d[0] * k;
+          var nc = c + d[1] * k;
           if (nr < 0 || nr >= sz || nc < 0 || nc >= sz) break;
           if (b[nr * sz + nc] === start) {
             line.push(nr * sz + nc);
@@ -313,46 +332,30 @@ function checkWinFull(b, sz, goal) {
             break;
           }
         }
-        if (line.length === goal) return { win: true, line };
+        if (line.length === goal) return { win: true, line: line };
       }
     }
   }
-  return { win: false };
+  return { win: false, line: [] };
 }
 
 function checkWinSimple(b, sz, goal) {
   return checkWinFull(b, sz, goal).win;
 }
 
-/* ─────────────────────────────────────────────────────
-   AI ENGINE v2 — TACTICAL BRAIN
-   Priority chain:
-     1. Win immediately
-     2. Block opponent win
-     3. Create a Fork (two winning threats at once)
-     4. Block opponent Fork
-     5. Strategic position (center → corners → edges)
-   Level Expert on 3×3: Minimax with alpha-beta pruning
-   ───────────────────────────────────────────────────── */
-
-/**
- * Count open winning lines that pass through a cell.
- * Used to score strategic positions.
- */
 function countOpenLines(b, sz, goal, sym) {
-  const dirs  = [[1,0],[0,1],[1,1],[1,-1]];
-  let threats = 0;
-
-  for (let r = 0; r < sz; r++) {
-    for (let c = 0; c < sz; c++) {
-      for (const d of dirs) {
-        // check if a full line of `goal` starting here is unblocked for `sym`
-        let ours    = 0;
-        let blocked = false;
-        for (let k = 0; k < goal; k++) {
-          const nr = r + d[0]*k, nc = c + d[1]*k;
+  var dirs  = [[1, 0], [0, 1], [1, 1], [1, -1]];
+  var threats = 0;
+  for (var r = 0; r < sz; r++) {
+    for (var c = 0; c < sz; c++) {
+      for (var di = 0; di < dirs.length; di++) {
+        var d = dirs[di];
+        var ours = 0;
+        var blocked = false;
+        for (var k = 0; k < goal; k++) {
+          var nr = r + d[0] * k, nc = c + d[1] * k;
           if (nr < 0 || nr >= sz || nc < 0 || nc >= sz) { blocked = true; break; }
-          const v = b[nr*sz + nc];
+          var v = b[nr * sz + nc];
           if (v && v !== sym) { blocked = true; break; }
           if (v === sym) ours++;
         }
@@ -363,241 +366,209 @@ function countOpenLines(b, sz, goal, sym) {
   return threats;
 }
 
-/**
- * Count how many winning moves (forks) a symbol can create from position `idx`.
- * A fork = after placing sym at idx, there are >= 2 distinct winning threats.
- */
 function countWinningThreats(b, sz, goal, idx, sym) {
   if (b[idx]) return 0;
   b[idx] = sym;
-
-  const dirs  = [[1,0],[0,1],[1,1],[1,-1]];
-  const winLines = new Set();
-
-  // find every (goal-1)-in-a-row that needs one more cell
-  const empties = b.map((v,i) => v === '' ? i : -1).filter(i => i !== -1);
-  for (const e of empties) {
+  var dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+  var winLines = {};
+  var winCount = 0;
+  var empties = [];
+  for (var ei = 0; ei < b.length; ei++) {
+    if (b[ei] === "") empties.push(ei);
+  }
+  for (var x = 0; x < empties.length; x++) {
+    var e = empties[x];
     if (e === idx) continue;
     b[e] = sym;
     if (checkWinSimple(b, sz, goal)) {
-      // encode the winning line's direction as a string key to avoid double-counting
-      for (const d of dirs) {
-        for (let r = 0; r < sz; r++) {
-          for (let c = 0; c < sz; c++) {
-            const line = [];
-            for (let k = 0; k < goal; k++) {
-              const nr = r + d[0]*k, nc = c + d[1]*k;
+      for (var di = 0; di < dirs.length; di++) {
+        var d = dirs[di];
+        for (var r = 0; r < sz; r++) {
+          for (var c = 0; c < sz; c++) {
+            var line = [];
+            for (var k = 0; k < goal; k++) {
+              var nr = r + d[0] * k, nc = c + d[1] * k;
               if (nr < 0 || nr >= sz || nc < 0 || nc >= sz) break;
-              if (b[nr*sz+nc] === sym) line.push(nr*sz+nc);
+              if (b[nr * sz + nc] === sym) line.push(nr * sz + nc);
               else break;
             }
-            if (line.length === goal && line.includes(e)) {
-              winLines.add(line.sort().join(','));
+            if (line.length === goal && line.indexOf(e) !== -1) {
+              var key = line.slice().sort(function (a, b2) { return a - b2; }).join(",");
+              if (!winLines[key]) { winLines[key] = true; winCount++; }
             }
           }
         }
       }
     }
-    b[e] = '';
+    b[e] = "";
   }
-
-  b[idx] = '';
-  return winLines.size;
+  b[idx] = "";
+  return winCount;
 }
 
-/**
- * Minimax with alpha-beta pruning — only used for Expert on 3x3
- */
 function minimax(b, sz, goal, depth, isMax, alpha, beta, meSymbol, enemySymbol, maxDepth) {
-  const res = checkWinFull(b, sz, goal);
+  var res = checkWinFull(b, sz, goal);
   if (res.win) {
-    // whoever just moved won
-    const winner = b[res.line[0]];
+    var winner = b[res.line[0]];
     return winner === meSymbol ? (100 - depth) : -(100 - depth);
   }
-
-  const empties = b.map((v,i) => v === '' ? i : -1).filter(i => i !== -1);
+  var empties = [];
+  for (var i = 0; i < b.length; i++) { if (b[i] === "") empties.push(i); }
   if (!empties.length || depth >= maxDepth) return 0;
 
   if (isMax) {
-    let best = -Infinity;
-    for (const i of empties) {
-      b[i] = meSymbol;
-      const score = minimax(b, sz, goal, depth+1, false, alpha, beta, meSymbol, enemySymbol, maxDepth);
-      b[i] = '';
-      best  = Math.max(best, score);
-      alpha = Math.max(alpha, best);
-      if (beta <= alpha) break; // prune
+    var best = -Infinity;
+    for (var ei = 0; ei < empties.length; ei++) {
+      b[empties[ei]] = meSymbol;
+      var score = minimax(b, sz, goal, depth + 1, false, alpha, beta, meSymbol, enemySymbol, maxDepth);
+      b[empties[ei]] = "";
+      if (score > best) best = score;
+      if (best > alpha) alpha = best;
+      if (beta <= alpha) break;
     }
     return best;
   } else {
-    let best = Infinity;
-    for (const i of empties) {
-      b[i] = enemySymbol;
-      const score = minimax(b, sz, goal, depth+1, true, alpha, beta, meSymbol, enemySymbol, maxDepth);
-      b[i] = '';
-      best = Math.min(best, score);
-      beta = Math.min(beta, best);
-      if (beta <= alpha) break; // prune
+    var best2 = Infinity;
+    for (var ei2 = 0; ei2 < empties.length; ei2++) {
+      b[empties[ei2]] = enemySymbol;
+      var score2 = minimax(b, sz, goal, depth + 1, true, alpha, beta, meSymbol, enemySymbol, maxDepth);
+      b[empties[ei2]] = "";
+      if (score2 < best2) best2 = score2;
+      if (best2 < beta) beta = best2;
+      if (beta <= alpha) break;
     }
-    return best;
+    return best2;
   }
 }
 
-/**
- * Tactical AI: returns best move index.
- * level: 'easy' | 'normal' | 'hard' | 'expert'
- */
 function findBestMove(board, empties, cfg, meSymbol, enemySymbol) {
-  const sz   = cfg.size;
-  const gl   = cfg.goal;
-  const is3x3Expert = (sz === 3 && gl === 3 && cfg.ai === 'expert');
+  var sz = cfg.size;
+  var gl = cfg.goal;
+  var is3x3Expert = (sz === 3 && gl === 3 && cfg.ai === "expert");
 
-  /* ── STEP 1: Win immediately ── */
-  for (const i of empties) {
-    board[i] = meSymbol;
-    const win = checkWinSimple(board, sz, gl);
-    board[i] = '';
-    if (win) return i;
+  // STEP 1: Win immediately
+  for (var i = 0; i < empties.length; i++) {
+    board[empties[i]] = meSymbol;
+    if (checkWinSimple(board, sz, gl)) { board[empties[i]] = ""; return empties[i]; }
+    board[empties[i]] = "";
   }
 
-  /* ── STEP 2: Block opponent immediate win ── */
-  for (const i of empties) {
-    board[i] = enemySymbol;
-    const win = checkWinSimple(board, sz, gl);
-    board[i] = '';
-    if (win) return i;
+  // STEP 2: Block opponent immediate win
+  for (var j = 0; j < empties.length; j++) {
+    board[empties[j]] = enemySymbol;
+    if (checkWinSimple(board, sz, gl)) { board[empties[j]] = ""; return empties[j]; }
+    board[empties[j]] = "";
   }
 
-  /* ── Expert 3×3: full Minimax ── */
+  // Expert 3x3: full Minimax with alpha-beta
   if (is3x3Expert) {
-    let bestScore = -Infinity;
-    let bestMove  = empties[0];
-    for (const i of empties) {
-      board[i] = meSymbol;
-      const score = minimax(board, sz, gl, 0, false, -Infinity, Infinity, meSymbol, enemySymbol, 9);
-      board[i] = '';
-      if (score > bestScore) { bestScore = score; bestMove = i; }
+    var bestScore = -Infinity;
+    var bestMove  = empties[0];
+    for (var mi = 0; mi < empties.length; mi++) {
+      board[empties[mi]] = meSymbol;
+      var sc = minimax(board, sz, gl, 0, false, -Infinity, Infinity, meSymbol, enemySymbol, 9);
+      board[empties[mi]] = "";
+      if (sc > bestScore) { bestScore = sc; bestMove = empties[mi]; }
     }
     return bestMove;
   }
 
-  /* ── STEP 3 (Hard+): Create a Fork — two threats at once ── */
-  if (cfg.ai === 'hard' || cfg.ai === 'expert') {
-    for (const i of empties) {
-      if (countWinningThreats(board, sz, gl, i, meSymbol) >= 2) return i;
+  // STEP 3 (Hard+): Create a Fork
+  if (cfg.ai === "hard" || cfg.ai === "expert") {
+    for (var fi = 0; fi < empties.length; fi++) {
+      if (countWinningThreats(board, sz, gl, empties[fi], meSymbol) >= 2) return empties[fi];
     }
-
-    /* ── STEP 4: Block opponent Fork ── */
-    for (const i of empties) {
-      if (countWinningThreats(board, sz, gl, i, enemySymbol) >= 2) return i;
+    // STEP 4: Block opponent Fork
+    for (var bi = 0; bi < empties.length; bi++) {
+      if (countWinningThreats(board, sz, gl, empties[bi], enemySymbol) >= 2) return empties[bi];
     }
   }
 
-  /* ── STEP 5: Strategic position scoring ── */
-  const center = Math.floor(sz / 2);
-
-  // Score each empty cell
-  const scored = empties.map(i => {
-    const r = Math.floor(i / sz), c = i % sz;
-    let score = 0;
-
-    // Center is highest priority
+  // STEP 5: Strategic position scoring
+  var center = Math.floor(sz / 2);
+  var scored = empties.map(function (idx) {
+    var r = Math.floor(idx / sz), c = idx % sz;
+    var score = 0;
     if (r === center && c === center) score += 50;
-
-    // Corners
-    const isCorner = (r === 0 || r === sz-1) && (c === 0 || c === sz-1);
+    var isCorner = (r === 0 || r === sz - 1) && (c === 0 || c === sz - 1);
     if (isCorner) score += 20;
-
-    // Edges (non-corner)
-    const isEdge = (r === 0 || r === sz-1 || c === 0 || c === sz-1) && !isCorner;
+    var isEdge = (r === 0 || r === sz - 1 || c === 0 || c === sz - 1) && !isCorner;
     if (isEdge) score += 5;
-
-    // Count open lines our symbol contributes to
-    board[i] = meSymbol;
+    board[idx] = meSymbol;
     score += countOpenLines(board, sz, gl, meSymbol) * 2;
-    board[i] = '';
-
-    // Small perturbation to break perfect ties stochastically
+    board[idx] = "";
     score += Math.random() * 0.5;
-
-    return { i, score };
+    return { i: idx, score: score };
   });
-
-  scored.sort((a, b) => b.score - a.score);
+  scored.sort(function (a, b) { return b.score - a.score; });
   return scored[0].i;
 }
 
-/**
- * Returns the bot's chosen cell index.
- * Applies mistake probability for easy/normal; full tactics for hard/expert.
- */
 function getBotMove(board, cfg, symbols) {
-  const empties = board.map((v, i) => v === '' ? i : -1).filter(i => i !== -1);
+  var empties = [];
+  for (var i = 0; i < board.length; i++) { if (board[i] === "") empties.push(i); }
   if (!empties.length) return -1;
 
-  // Mistake probability by difficulty
-  let mistakeChance = 0;
-  if (cfg.ai === 'easy')   mistakeChance = 0.75; // very dumb
-  if (cfg.ai === 'normal') mistakeChance = 0.35; // occasional errors
-  if (cfg.ai === 'hard')   mistakeChance = 0.08; // rare slip
-  // expert: 0 — always uses tactics / minimax
+  var mistakeChance = 0;
+  if (cfg.ai === "easy")   mistakeChance = 0.75;
+  if (cfg.ai === "normal") mistakeChance = 0.35;
+  if (cfg.ai === "hard")   mistakeChance = 0.08;
 
   if (Math.random() < mistakeChance) {
-    // deliberate random mistake
     return empties[Math.floor(Math.random() * empties.length)];
   }
-
   return findBestMove(board, empties, cfg, symbols[1], symbols[0]);
 }
 
 /* ─────────────────────────────────────────────────────
    I18N — LOCALISATION
    ───────────────────────────────────────────────────── */
-const I18N = {
+var I18N = {
   ru: {
-    home: "Главная", settings: "Настройки", start: "Начать игру", save: "Сохранить",
-    applied: "Настройки применены",
-    lang: "Язык", theme: "Тема",
-    themeLight: "Светлая", themeDark: "Тёмная", themeGold: "Золотая",
-    thLight: "Светлая", thDark: "Тёмная", thGold: "Золотая",
-    sound: "Звук", soundOn: "Включен", soundOff: "Выключен",
-    mode: "Режим", size: "Размер поля", goal: "Цель (в ряд)", ai: "Сложность ИИ",
-    aiEasy: "Лёгкая (Ошибается)", aiNormal: "Нормальная", aiHard: "Сложная", aiExpert: "Непобедимый",
-    p1: "Игрок 1", p2: "Игрок 2", p3: "Игрок 3", p4: "Игрок 4",
-    playersLabel: "Имена игроков",
-    lblCustomSym: "Символы игроков (Эмодзи)",
-    statsTitle: "Статистика", statsTotal: "Всего:", statsWins: "Побед:", statsWinrate: "Винрейт:",
-    careerTitle: "Уровень Карьеры", careerXp: "Опыт:",
-    btnAbout: "ℹ Об авторе",
-    lblMatchMod: "Тип матча",
-    modClassic: "Классика (Обычная игра)",
-    modSuper: "Супер-режим (С абилками)",
-    draftTitle: "Выбор способностей",
-    draftSub: (p, c) => `Ход: ${p} (${c}/3)`,
+    home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438", start: "\u041D\u0430\u0447\u0430\u0442\u044C \u0438\u0433\u0440\u0443", save: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C",
+    applied: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u0440\u0438\u043C\u0435\u043D\u0435\u043D\u044B",
+    lang: "\u042F\u0437\u044B\u043A", theme: "\u0422\u0435\u043C\u0430",
+    themeLight: "\u0421\u0432\u0435\u0442\u043B\u0430\u044F", themeDark: "\u0422\u0451\u043C\u043D\u0430\u044F", themeGold: "\u0417\u043E\u043B\u043E\u0442\u0430\u044F",
+    thLight: "\u0421\u0432\u0435\u0442\u043B\u0430\u044F", thDark: "\u0422\u0451\u043C\u043D\u0430\u044F", thGold: "\u0417\u043E\u043B\u043E\u0442\u0430\u044F",
+    sound: "\u0417\u0432\u0443\u043A", soundOn: "\u0412\u043A\u043B\u044E\u0447\u0435\u043D", soundOff: "\u0412\u044B\u043A\u043B\u044E\u0447\u0435\u043D",
+    mode: "\u0420\u0435\u0436\u0438\u043C", size: "\u0420\u0430\u0437\u043C\u0435\u0440 \u043F\u043E\u043B\u044F", goal: "\u0426\u0435\u043B\u044C (\u0432 \u0440\u044F\u0434)", ai: "\u0421\u043B\u043E\u0436\u043D\u043E\u0441\u0442\u044C \u0418\u0418",
+    aiEasy: "\u041B\u0451\u0433\u043A\u0430\u044F (\u041E\u0448\u0438\u0431\u0430\u0435\u0442\u0441\u044F)", aiNormal: "\u041D\u043E\u0440\u043C\u0430\u043B\u044C\u043D\u0430\u044F", aiHard: "\u0421\u043B\u043E\u0436\u043D\u0430\u044F", aiExpert: "\u041D\u0435\u043F\u043E\u0431\u0435\u0434\u0438\u043C\u044B\u0439",
+    p1: "\u0418\u0433\u0440\u043E\u043A 1", p2: "\u0418\u0433\u0440\u043E\u043A 2", p3: "\u0418\u0433\u0440\u043E\u043A 3", p4: "\u0418\u0433\u0440\u043E\u043A 4",
+    playersLabel: "\u0418\u043C\u0435\u043D\u0430 \u0438\u0433\u0440\u043E\u043A\u043E\u0432",
+    lblCustomSym: "\u0421\u0438\u043C\u0432\u043E\u043B\u044B \u0438\u0433\u0440\u043E\u043A\u043E\u0432 (Emoji)",
+    statsTitle: "\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043A\u0430", statsTotal: "\u0412\u0441\u0435\u0433\u043E:", statsWins: "\u041F\u043E\u0431\u0435\u0434:", statsWinrate: "\u0412\u0438\u043D\u0440\u0435\u0439\u0442:",
+    careerTitle: "\u0423\u0440\u043E\u0432\u0435\u043D\u044C \u041A\u0430\u0440\u044C\u0435\u0440\u044B", careerXp: "\u041E\u043F\u044B\u0442:",
+    btnAbout: "\u2139 \u041E\u0431 \u0430\u0432\u0442\u043E\u0440\u0435",
+    lblMatchMod: "\u0422\u0438\u043F \u043C\u0430\u0442\u0447\u0430",
+    modClassic: "\u041A\u043B\u0430\u0441\u0441\u0438\u043A\u0430 (\u041E\u0431\u044B\u0447\u043D\u0430\u044F \u0438\u0433\u0440\u0430)",
+    modSuper: "\u0421\u0443\u043F\u0435\u0440-\u0440\u0435\u0436\u0438\u043C (\u0421 \u0430\u0431\u0438\u043B\u043A\u0430\u043C\u0438)",
+    draftTitle: "\u0412\u044B\u0431\u043E\u0440 \u0441\u043F\u043E\u0441\u043E\u0431\u043D\u043E\u0441\u0442\u0435\u0439",
+    draftSub: function (p, c) { return "\u0425\u043E\u0434: " + p + " (" + c + "/3)"; },
+    draftWaiting: "\u041E\u0436\u0438\u0434\u0430\u043D\u0438\u0435 \u0441\u043E\u043F\u0435\u0440\u043D\u0438\u043A\u0430...",
+    draftBotPicking: "\uD83E\uDD16 \u0411\u043E\u0442 \u0432\u044B\u0431\u0438\u0440\u0430\u0435\u0442 \u043A\u0430\u0440\u0442\u044B...",
     abilitiesData: [
-      { name: "Удар Тора", desc: "Выжигает любую занятую клетку врага.", cat: "atk", emoji: "💥" },
-      { name: "Хакинг", desc: "Перекрашивает чужую фигуру в твой символ.", cat: "atk", emoji: "🔄" },
-      { name: "Землетрясение", desc: "Перемешивает 3 случайные фигуры на поле.", cat: "atk", emoji: "🌪️" },
-      { name: "Заморозка", desc: "Блокирует пустую клетку на 2 хода.", cat: "def", emoji: "❄️" },
-      { name: "Щит", desc: "Защищает твою фигуру от Тора и Хакинга.", cat: "def", emoji: "🛡️" },
-      { name: "Оглушение", desc: "Заставляет врага пропустить 1 следующий ход.", cat: "def", emoji: "🛑" },
-      { name: "Блицкриг", desc: "Позволяет сделать 2 хода подряд в этот раунд.", cat: "tac", emoji: "👟" },
-      { name: "Телепорт", desc: "Переносит твою фигуру в пустое место.", cat: "tac", emoji: "🔮" },
-      { name: "Отмена", desc: "Отменяет самый последний ход соперника.", cat: "tac", emoji: "🕵️♂️" },
-      { name: "Зеркало", desc: "Отражает направленную в тебя абилку назад.", cat: "tac", emoji: "🃏" }
+      { name: "\u0423\u0434\u0430\u0440 \u0422\u043E\u0440\u0430", desc: "\u0412\u044B\u0436\u0438\u0433\u0430\u0435\u0442 \u043B\u044E\u0431\u0443\u044E \u0437\u0430\u043D\u044F\u0442\u0443\u044E \u043A\u043B\u0435\u0442\u043A\u0443 \u0432\u0440\u0430\u0433\u0430.", cat: "atk", emoji: "\uD83D\uDCA5" },
+      { name: "\u0425\u0430\u043A\u0438\u043D\u0433", desc: "\u041F\u0435\u0440\u0435\u043A\u0440\u0430\u0448\u0438\u0432\u0430\u0435\u0442 \u0447\u0443\u0436\u0443\u044E \u0444\u0438\u0433\u0443\u0440\u0443 \u0432 \u0442\u0432\u043E\u0439 \u0441\u0438\u043C\u0432\u043E\u043B.", cat: "atk", emoji: "\uD83D\uDD04" },
+      { name: "\u0417\u0435\u043C\u043B\u0435\u0442\u0440\u044F\u0441\u0435\u043D\u0438\u0435", desc: "\u041F\u0435\u0440\u0435\u043C\u0435\u0448\u0438\u0432\u0430\u0435\u0442 3 \u0441\u043B\u0443\u0447\u0430\u0439\u043D\u044B\u0435 \u0444\u0438\u0433\u0443\u0440\u044B \u043D\u0430 \u043F\u043E\u043B\u0435.", cat: "atk", emoji: "\uD83C\uDF2A\uFE0F" },
+      { name: "\u0417\u0430\u043C\u043E\u0440\u043E\u0437\u043A\u0430", desc: "\u0411\u043B\u043E\u043A\u0438\u0440\u0443\u0435\u0442 \u043F\u0443\u0441\u0442\u0443\u044E \u043A\u043B\u0435\u0442\u043A\u0443 \u043D\u0430 2 \u0445\u043E\u0434\u0430.", cat: "def", emoji: "\u2744\uFE0F" },
+      { name: "\u0429\u0438\u0442", desc: "\u0417\u0430\u0449\u0438\u0449\u0430\u0435\u0442 \u0442\u0432\u043E\u044E \u0444\u0438\u0433\u0443\u0440\u0443 \u043E\u0442 \u0422\u043E\u0440\u0430 \u0438 \u0425\u0430\u043A\u0438\u043D\u0433\u0430.", cat: "def", emoji: "\uD83D\uDEE1\uFE0F" },
+      { name: "\u041E\u0433\u043B\u0443\u0448\u0435\u043D\u0438\u0435", desc: "\u0417\u0430\u0441\u0442\u0430\u0432\u043B\u044F\u0435\u0442 \u0432\u0440\u0430\u0433\u0430 \u043F\u0440\u043E\u043F\u0443\u0441\u0442\u0438\u0442\u044C 1 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0445\u043E\u0434.", cat: "def", emoji: "\uD83D\uDED1" },
+      { name: "\u0411\u043B\u0438\u0446\u043A\u0440\u0438\u0433", desc: "\u041F\u043E\u0437\u0432\u043E\u043B\u044F\u0435\u0442 \u0441\u0434\u0435\u043B\u0430\u0442\u044C 2 \u0445\u043E\u0434\u0430 \u043F\u043E\u0434\u0440\u044F\u0434 \u0432 \u044D\u0442\u043E\u0442 \u0440\u0430\u0443\u043D\u0434.", cat: "tac", emoji: "\uD83D\uDC5F" },
+      { name: "\u0422\u0435\u043B\u0435\u043F\u043E\u0440\u0442", desc: "\u041F\u0435\u0440\u0435\u043D\u043E\u0441\u0438\u0442 \u0442\u0432\u043E\u044E \u0444\u0438\u0433\u0443\u0440\u0443 \u0432 \u043F\u0443\u0441\u0442\u043E\u0435 \u043C\u0435\u0441\u0442\u043E.", cat: "tac", emoji: "\uD83D\uDD2E" },
+      { name: "\u041E\u0442\u043C\u0435\u043D\u0430", desc: "\u041E\u0442\u043C\u0435\u043D\u044F\u0435\u0442 \u0441\u0430\u043C\u044B\u0439 \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0439 \u0445\u043E\u0434 \u0441\u043E\u043F\u0435\u0440\u043D\u0438\u043A\u0430.", cat: "tac", emoji: "\uD83D\uDD75\uFE0F\u200D\u2642\uFE0F" },
+      { name: "\u0417\u0435\u0440\u043A\u0430\u043B\u043E", desc: "\u041E\u0442\u0440\u0430\u0436\u0430\u0435\u0442 \u043D\u0430\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043D\u0443\u044E \u0432 \u0442\u0435\u0431\u044F \u0430\u0431\u0438\u043B\u043A\u0443 \u043D\u0430\u0437\u0430\u0434.", cat: "tac", emoji: "\uD83C\uDCCF" }
     ],
-    modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Игрока", mode4: "4 Игрока",
-    exit: "Выйти", undo: "Отмена", restart: "Заново",
-    turn:  (n)  => `Ход: ${n}`,
-    sub:   (sz, g) => `${sz}×${sz} • Цель: ${g}`,
-    play: "Игра идёт", win: "Победа!", draw: "Ничья",
-    confirmTitle: "Подтверждение",
-    confirmExit:  "Выйти в меню?", confirmNew: "Начать заново?",
-    ok: "Да", cancel: "Нет",
-    infoTitle: "Об авторе",
-    infoBtnClose: "Закрыть",
-    infoHtml: "Создатель игры: <strong>Абдуллох Юлдошев (Alex)</strong><br><br><a href='https://abdullokhyuldoshev.taplink.ws/' target='_blank' class='btn btnPrimary' style='display:inline-flex; width:auto; padding:10px 20px; font-size:15px; text-decoration:none; margin-top:8px;'>👉 Открыть Taplink</a>"
+    modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 \u0418\u0433\u0440\u043E\u043A\u0430", mode4: "4 \u0418\u0433\u0440\u043E\u043A\u0430",
+    exit: "\u0412\u044B\u0439\u0442\u0438", undo: "\u041E\u0442\u043C\u0435\u043D\u0430", restart: "\u0417\u0430\u043D\u043E\u0432\u043E",
+    turn:  function (n) { return "\u0425\u043E\u0434: " + n; },
+    sub:   function (sz, g) { return sz + "\u00D7" + sz + " \u2022 \u0426\u0435\u043B\u044C: " + g; },
+    play: "\u0418\u0433\u0440\u0430 \u0438\u0434\u0451\u0442", win: "\u041F\u043E\u0431\u0435\u0434\u0430!", draw: "\u041D\u0438\u0447\u044C\u044F",
+    confirmTitle: "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u0435",
+    confirmExit: "\u0412\u044B\u0439\u0442\u0438 \u0432 \u043C\u0435\u043D\u044E?", confirmNew: "\u041D\u0430\u0447\u0430\u0442\u044C \u0437\u0430\u043D\u043E\u0432\u043E?",
+    ok: "\u0414\u0430", cancel: "\u041D\u0435\u0442",
+    infoTitle: "\u041E\u0431 \u0430\u0432\u0442\u043E\u0440\u0435",
+    infoBtnClose: "\u0417\u0430\u043A\u0440\u044B\u0442\u044C",
+    infoHtml: "\u0421\u043E\u0437\u0434\u0430\u0442\u0435\u043B\u044C \u0438\u0433\u0440\u044B: <strong>\u0410\u0431\u0434\u0443\u043B\u043B\u043E\u0445 \u042E\u043B\u0434\u043E\u0448\u0435\u0432 (Alex)</strong><br><br><a href='https://abdullokhyuldoshev.taplink.ws/' target='_blank' class='btn btnPrimary' style='display:inline-flex; width:auto; padding:10px 20px; font-size:15px; text-decoration:none; margin-top:8px;'>\uD83D\uDC49 \u041E\u0442\u043A\u0440\u044B\u0442\u044C Taplink</a>"
   },
   en: {
     home: "Home", settings: "Settings", start: "Start", save: "Save",
@@ -613,35 +584,37 @@ const I18N = {
     lblCustomSym: "Player Symbols (Emoji)",
     statsTitle: "Statistics", statsTotal: "Total:", statsWins: "Wins:", statsWinrate: "Win Rate:",
     careerTitle: "Career Level", careerXp: "XP:",
-    btnAbout: "ℹ About Author",
+    btnAbout: "\u2139 About Author",
     lblMatchMod: "Match Type",
     modClassic: "Classic (Standard Game)",
     modSuper: "Super Mode (Abilities)",
     draftTitle: "Draft Abilities",
-    draftSub: (p, c) => `Turn: ${p} (${c}/3)`,
+    draftSub: function (p, c) { return "Turn: " + p + " (" + c + "/3)"; },
+    draftWaiting: "Waiting for opponent...",
+    draftBotPicking: "\uD83E\uDD16 Bot is picking cards...",
     abilitiesData: [
-      { name: "Thor's Strike", desc: "Strikes and clears any occupied cell.", cat: "atk", emoji: "💥" },
-      { name: "Hacking", desc: "Converts an enemy piece to your symbol.", cat: "atk", emoji: "🔄" },
-      { name: "Earthquake", desc: "Shuffles 3 random pieces on the board.", cat: "atk", emoji: "🌪️" },
-      { name: "Freeze", desc: "Blocks an empty cell for 2 turns.", cat: "def", emoji: "❄️" },
-      { name: "Shield", desc: "Protects your piece from Thor or Hacking.", cat: "def", emoji: "🛡️" },
-      { name: "Stun", desc: "Forces selected opponent to skip 1 turn.", cat: "def", emoji: "🛑" },
-      { name: "Blitzkrieg", desc: "Grants you an extra move immediately.", cat: "tac", emoji: "👟" },
-      { name: "Teleport", desc: "Moves your existing piece to any empty cell.", cat: "tac", emoji: "🔮" },
-      { name: "Cancel", desc: "Reverts the last move made by an opponent.", cat: "tac", emoji: "🕵️♂️" },
-      { name: "Mirror", desc: "Passively counters and reflects enemy perks.", cat: "tac", emoji: "🃏" }
+      { name: "Thor's Strike", desc: "Strikes and clears any occupied cell.", cat: "atk", emoji: "\uD83D\uDCA5" },
+      { name: "Hacking", desc: "Converts an enemy piece to your symbol.", cat: "atk", emoji: "\uD83D\uDD04" },
+      { name: "Earthquake", desc: "Shuffles 3 random pieces on the board.", cat: "atk", emoji: "\uD83C\uDF2A\uFE0F" },
+      { name: "Freeze", desc: "Blocks an empty cell for 2 turns.", cat: "def", emoji: "\u2744\uFE0F" },
+      { name: "Shield", desc: "Protects your piece from Thor or Hacking.", cat: "def", emoji: "\uD83D\uDEE1\uFE0F" },
+      { name: "Stun", desc: "Forces selected opponent to skip 1 turn.", cat: "def", emoji: "\uD83D\uDED1" },
+      { name: "Blitzkrieg", desc: "Grants you an extra move immediately.", cat: "tac", emoji: "\uD83D\uDC5F" },
+      { name: "Teleport", desc: "Moves your existing piece to any empty cell.", cat: "tac", emoji: "\uD83D\uDD2E" },
+      { name: "Cancel", desc: "Reverts the last move made by an opponent.", cat: "tac", emoji: "\uD83D\uDD75\uFE0F\u200D\u2642\uFE0F" },
+      { name: "Mirror", desc: "Passively counters and reflects enemy perks.", cat: "tac", emoji: "\uD83C\uDCCF" }
     ],
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Players", mode4: "4 Players",
     exit: "Exit", undo: "Undo", restart: "Restart",
-    turn:  (n)  => `Turn: ${n}`,
-    sub:   (sz, g) => `${sz}×${sz} • Goal: ${g}`,
+    turn:  function (n) { return "Turn: " + n; },
+    sub:   function (sz, g) { return sz + "\u00D7" + sz + " \u2022 Goal: " + g; },
     play: "Playing", win: "Winner!", draw: "Draw",
     confirmTitle: "Confirm",
-    confirmExit:  "Exit to menu?", confirmNew: "Restart game?",
+    confirmExit: "Exit to menu?", confirmNew: "Restart game?",
     ok: "Yes", cancel: "No",
     infoTitle: "About Author",
     infoBtnClose: "Close",
-    infoHtml: "Game creator: <strong>Abdullokh Yuldoshev (Alex)</strong><br><br><a href='https://abdullokhyuldoshev.taplink.ws/' target='_blank' class='btn btnPrimary' style='display:inline-flex; width:auto; padding:10px 20px; font-size:15px; text-decoration:none; margin-top:8px;'>👉 Open Taplink</a>"
+    infoHtml: "Game creator: <strong>Abdullokh Yuldoshev (Alex)</strong><br><br><a href='https://abdullokhyuldoshev.taplink.ws/' target='_blank' class='btn btnPrimary' style='display:inline-flex; width:auto; padding:10px 20px; font-size:15px; text-decoration:none; margin-top:8px;'>\uD83D\uDC49 Open Taplink</a>"
   },
   uz: {
     home: "Bosh sahifa", settings: "Sozlamalar", start: "Boshlash", save: "Saqlash",
@@ -657,338 +630,429 @@ const I18N = {
     lblCustomSym: "O'yinchi belgilari (Emoji)",
     statsTitle: "Statistika", statsTotal: "Jami:", statsWins: "G'alaba:", statsWinrate: "Yutuq:",
     careerTitle: "Karera darajasi", careerXp: "Tajriba:",
-    btnAbout: "ℹ Muallif haqida",
+    btnAbout: "\u2139 Muallif haqida",
     lblMatchMod: "O'yin turi",
     modClassic: "Klassika (Oddiy o'yin)",
     modSuper: "Super Rejim (Abilkalar)",
     draftTitle: "Qobiliyatlar tanlovi",
-    draftSub: (p, c) => `Navbat: ${p} (${c}/3)`,
+    draftSub: function (p, c) { return "Navbat: " + p + " (" + c + "/3)"; },
+    draftWaiting: "Raqib kutilmoqda...",
+    draftBotPicking: "\uD83E\uDD16 Bot kartalarni tanlayapti...",
     abilitiesData: [
-      { name: "Tor Zarbasi", desc: "Istalgan band katakni yo'q qiladi.", cat: "atk", emoji: "💥" },
-      { name: "Xaking", desc: "Raqib belgisini o'zingiznikiga o'zgartiradi.", cat: "atk", emoji: "🔄" },
-      { name: "Zilzila", desc: "Jamoadagi 3 ta belgini tasodifiy aralashtiradi.", cat: "atk", emoji: "🌪️" },
-      { name: "Muzlatish", desc: "Bo'sh katakni 2 turgacha muzlatib qo'yadi.", cat: "def", emoji: "❄️" },
-      { name: "Qalqon", desc: "Belgingizni Tor va Xakingdan himoya qiladi.", cat: "def", emoji: "🛡️" },
-      { name: "Stun", desc: "Raqibni 1 ta navbatni o'tkazib yuborishga majbur qiladi.", cat: "def", emoji: "🛑" },
-      { name: "Blitskrig", desc: "Ketma-ket 2 marta yurish imkonini beradi.", cat: "tac", emoji: "👟" },
-      { name: "Teleport", desc: "Belgingizni boshqa bo'sh katakka ko'chiradi.", cat: "tac", emoji: "🔮" },
-      { name: "Bekor qilish", desc: "Raqibning oxirgi yurishini bekor qiladi.", cat: "tac", emoji: "🕵️♂️" },
-      { name: "Ko'zgu", desc: "Sizga qarshi ishlatilgan perkni qaytaradi.", cat: "tac", emoji: "🃏" }
+      { name: "Tor Zarbasi", desc: "Istalgan band katakni yo'q qiladi.", cat: "atk", emoji: "\uD83D\uDCA5" },
+      { name: "Xaking", desc: "Raqib belgisini o'zingiznikiga o'zgartiradi.", cat: "atk", emoji: "\uD83D\uDD04" },
+      { name: "Zilzila", desc: "Jamoadagi 3 ta belgini tasodifiy aralashtiradi.", cat: "atk", emoji: "\uD83C\uDF2A\uFE0F" },
+      { name: "Muzlatish", desc: "Bo'sh katakni 2 turgacha muzlatib qo'yadi.", cat: "def", emoji: "\u2744\uFE0F" },
+      { name: "Qalqon", desc: "Belgingizni Tor va Xakingdan himoya qiladi.", cat: "def", emoji: "\uD83D\uDEE1\uFE0F" },
+      { name: "Stun", desc: "Raqibni 1 ta navbatni o'tkazib yuborishga majbur qiladi.", cat: "def", emoji: "\uD83D\uDED1" },
+      { name: "Blitskrig", desc: "Ketma-ket 2 marta yurish imkonini beradi.", cat: "tac", emoji: "\uD83D\uDC5F" },
+      { name: "Teleport", desc: "Belgingizni boshqa bo'sh katakka ko'chiradi.", cat: "tac", emoji: "\uD83D\uDD2E" },
+      { name: "Bekor qilish", desc: "Raqibning oxirgi yurishini bekor qiladi.", cat: "tac", emoji: "\uD83D\uDD75\uFE0F\u200D\u2642\uFE0F" },
+      { name: "Ko'zgu", desc: "Sizga qarshi ishlatilgan perkni qaytaradi.", cat: "tac", emoji: "\uD83C\uDCCF" }
     ],
     modePVP: "1 vs 1", modeAI: "1 vs AI", mode3: "3 Kishi", mode4: "4 Kishi",
     exit: "Chiqish", undo: "Bekor", restart: "Qayta",
-    turn:  (n)  => `Navbat: ${n}`,
-    sub:   (sz, g) => `${sz}×${sz} • Maqsad: ${g}`,
+    turn:  function (n) { return "Navbat: " + n; },
+    sub:   function (sz, g) { return sz + "\u00D7" + sz + " \u2022 Maqsad: " + g; },
     play: "O'yin", win: "G'alaba!", draw: "Durang",
     confirmTitle: "Tasdiqlash",
-    confirmExit:  "Chiqasizmi?", confirmNew: "Qayta boshlash?",
+    confirmExit: "Chiqasizmi?", confirmNew: "Qayta boshlash?",
     ok: "Ha", cancel: "Yo'q",
     infoTitle: "Muallif haqida",
     infoBtnClose: "Yopish",
-    infoHtml: "O'yin yaratuvchisi: <strong>Abdullokh Yuldoshev (Alex)</strong><br><br><a href='https://abdullokhyuldoshev.taplink.ws/' target='_blank' class='btn btnPrimary' style='display:inline-flex; width:auto; padding:10px 20px; font-size:15px; text-decoration:none; margin-top:8px;'>👉 Taplink ochish</a>"
+    infoHtml: "O'yin yaratuvchisi: <strong>Abdullokh Yuldoshev (Alex)</strong><br><br><a href='https://abdullokhyuldoshev.taplink.ws/' target='_blank' class='btn btnPrimary' style='display:inline-flex; width:auto; padding:10px 20px; font-size:15px; text-decoration:none; margin-top:8px;'>\uD83D\uDC49 Taplink ochish</a>"
   }
 };
 
 /* ─────────────────────────────────────────────────────
    CONSTANTS
    ───────────────────────────────────────────────────── */
-const MODES = [
+var MODES = [
   { id: "pvp", key: "modePVP", players: 2, ai: false },
   { id: "ai",  key: "modeAI",  players: 2, ai: true  },
   { id: "p3",  key: "mode3",   players: 3, ai: false },
   { id: "p4",  key: "mode4",   players: 4, ai: false }
 ];
 
-const AI_LEVELS = [
+var AI_LEVELS = [
   { id: "easy",   key: "aiEasy"   },
   { id: "normal", key: "aiNormal" },
   { id: "hard",   key: "aiHard"   },
   { id: "expert", key: "aiExpert" }
 ];
 
-const THEMES = [
-  { id: "light", key: "themeLight" },
-  { id: "dark",  key: "themeDark"  },
-  { id: "gold",  key: "themeGold"  }
-];
-
-const SYMBOLS = ["X", "O", "△", "□"];
+var SYMBOLS = ["X", "O", "\u25B3", "\u25A1"];
 
 /* ─────────────────────────────────────────────────────
-   DOM HELPERS
+   CACHED DOM REFERENCES (resolved once at bootstrap)
    ───────────────────────────────────────────────────── */
-const $ = id => document.getElementById(id);
+var DOM = {};
+
+function $(id) { return document.getElementById(id); }
+
+function cacheDOMRefs() {
+  DOM.screenHome      = $("screenHome");
+  DOM.screenSettings  = $("screenSettings");
+  DOM.screenGame      = $("screenGame");
+  DOM.screenDraft     = $("screenDraft");
+  DOM.board           = $("board");
+  DOM.homeMeta        = $("homeMeta");
+  DOM.settingsTitle   = $("settingsTitle");
+  DOM.turnTitle       = $("turnTitle");
+  DOM.turnSub         = $("turnSub");
+  DOM.tabbarGlobal    = $("tabbarGlobal");
+  DOM.tabHome         = $("tabHome");
+  DOM.tabSettings     = $("tabSettings");
+  DOM.tabIndicator    = $("tabIndicator");
+  DOM.btnStart        = $("btnStart");
+  DOM.btnInfo         = $("btnInfo");
+  DOM.btnSave         = $("btnSave");
+  DOM.btnCreateOnline = $("btnCreateOnline");
+  DOM.btnCopyNetLink  = $("btnCopyNetLink");
+  DOM.btnCancelNet    = $("btnCancelNet");
+  DOM.btnSoundToggle  = $("btnSoundToggle");
+  DOM.btnThemeToggle  = $("btnThemeToggle");
+  DOM.btnLangToggle   = $("btnLangToggle");
+  DOM.themeMenu       = $("themeMenu");
+  DOM.langMenu        = $("langMenu");
+  DOM.btnExit         = $("btnExit");
+  DOM.btnRestart      = $("btnRestart");
+  DOM.btnUndo         = $("btnUndo");
+  DOM.selMatchMode    = $("selMatchMode");
+  DOM.selMode         = $("selMode");
+  DOM.selSize         = $("selSize");
+  DOM.selGoal         = $("selGoal");
+  DOM.selAI           = $("selAI");
+  DOM.aiRow           = $("aiRow");
+  DOM.inpP1           = $("inpP1");
+  DOM.inpP2           = $("inpP2");
+  DOM.inpP3           = $("inpP3");
+  DOM.inpP4           = $("inpP4");
+  DOM.inpSym1         = $("inpSym1");
+  DOM.inpSym2         = $("inpSym2");
+  DOM.inpSym3         = $("inpSym3");
+  DOM.inpSym4         = $("inpSym4");
+  DOM.rowP3           = $("rowP3");
+  DOM.rowP4           = $("rowP4");
+  DOM.modalBack       = $("modalBack");
+  DOM.modalTitle      = $("modalTitle");
+  DOM.modalText       = $("modalText");
+  DOM.modalCancel     = $("modalCancel");
+  DOM.modalOk         = $("modalOk");
+  DOM.toast           = $("toast");
+  DOM.gameAbilitiesBar = $("gameAbilitiesBar");
+  DOM.draftTitle      = $("draftTitle");
+  DOM.draftSubtitle   = $("draftSubtitle");
+  DOM.draftTimerNum   = $("draftTimerNum");
+  DOM.draftGrid       = $("draftGrid");
+  DOM.netModal        = $("netModal");
+  DOM.netStatusTitle  = $("netStatusTitle");
+  DOM.netStatusDesc   = $("netStatusDesc");
+  DOM.adminModal      = $("adminModal");
+  DOM.adminLoginScreen = $("adminLoginScreen");
+  DOM.adminDashboard  = $("adminDashboard");
+  DOM.adminLoginInput = $("adminLoginInput");
+  DOM.adminPassInput  = $("adminPassInput");
+  DOM.adminLoginBtn   = $("adminLoginBtn");
+  DOM.adminCloseBtn   = $("adminCloseBtn");
+  DOM.adminCloseBtn2  = $("adminCloseBtn2");
+  DOM.adminUnlockAll  = $("adminUnlockAll");
+  DOM.adminClearStorage = $("adminClearStorage");
+  DOM.adminRefreshNet = $("adminRefreshNet");
+  DOM.adminNetMonitor = $("adminNetMonitor");
+  DOM.gameVersion     = $("gameVersion");
+  DOM.lblCareerTitle  = $("lblCareerTitle");
+  DOM.lblCareerXp     = $("lblCareerXp");
+  DOM.careerProgressFill = $("careerProgressFill");
+  DOM.lblStatsTitle   = $("lblStatsTitle");
+  DOM.statTotal       = $("statTotal");
+  DOM.statWins        = $("statWins");
+  DOM.statWinrate     = $("statWinrate");
+  DOM.lblMatchMod     = $("lblMatchMod");
+  DOM.lblMode         = $("lblMode");
+  DOM.lblSize         = $("lblSize");
+  DOM.lblGoal         = $("lblGoal");
+  DOM.lblAI           = $("lblAI");
+  DOM.lblNames        = $("lblNames");
+  DOM.btnDevPanel     = $("btnDevPanel");
+}
 
 /* ─────────────────────────────────────────────────────
    GAME STATE
    ───────────────────────────────────────────────────── */
-let superMode = {
+var superMode = {
   activeAbility: null,
   playerDecks: {},
   usedAbilities: {},
+  frozenCells: {},
+  shieldedCells: {},
   draftOrder: [],
   draftTurnIndex: 0
 };
 
-let settings = loadSettings();
-let board    = [];
-let history  = [];
-let gameOver = false;
-let winLine  = [];
-let draftTimerInterval = null;
+var settings = loadSettings();
+var board    = [];
+var history  = [];
+var gameOver = false;
+var winLine  = [];
+var draftTimerInterval = null;
+var pendingRenderFrame = null;
 
 /* ─────────────────────────────────────────────────────
-   DOM REFERENCES (declared once, after DOMContentLoaded)
+   BATCHED RENDER (Zero Layout Thrashing)
    ───────────────────────────────────────────────────── */
-let screenHome;
-let screenSettings;
-let screenGame;
+function scheduleRender() {
+  if (pendingRenderFrame) return;
+  pendingRenderFrame = requestAnimationFrame(function () {
+    pendingRenderFrame = null;
+    renderGame();
+  });
+}
 
 /* ─────────────────────────────────────────────────────
-   INIT
+   INIT — SINGLE BOOTSTRAP ENTRY
    ───────────────────────────────────────────────────── */
 function init() {
-  // Resolve DOM references — exactly once each
-  screenHome     = $("screenHome");
-  screenSettings = $("screenSettings");
-  screenGame     = $("screenGame");
-
-  Confetti.init('confettiCanvas');
+  cacheDOMRefs();
+  Confetti.init("confettiCanvas");
   applyTheme();
   renderUI();
   initP2PNetwork();
+  bindEvents();
 
-  /* ── Event Listeners ── */
-  $("btnStart").onclick = () => {
+  // Restore saved game
+  var savedGame = loadGame();
+  if (savedGame && savedGame.board && savedGame.board.length > 0 && !savedGame.gameOver) {
+    board    = savedGame.board;
+    history  = savedGame.history || [];
+    gameOver = savedGame.gameOver;
+    settings = Object.assign({}, defaultSettings(), savedGame.settingsSnapshot);
+    renderGame();
+    go("game");
+  } else {
+    go("home");
+  }
+}
+
+/* ─────────────────────────────────────────────────────
+   EVENT BINDING (single pass, no accumulation)
+   ───────────────────────────────────────────────────── */
+function bindEvents() {
+  DOM.btnStart.onclick = function () {
     Sfx.click(settings.sound);
-    Haptic.trigger('light');
+    Haptic.trigger("light");
     if (settings.matchMode === "super") {
-      $("screenHome").classList.add("hidden");
-      $("screenDraft").classList.remove("hidden");
+      DOM.screenHome.classList.add("hidden");
+      DOM.screenDraft.classList.remove("hidden");
       startDraftPhase();
     } else {
       startNewGame();
     }
   };
 
-  if ($("btnCreateOnline")) {
-    $("btnCreateOnline").onclick = () => {
+  if (DOM.btnCreateOnline) {
+    DOM.btnCreateOnline.onclick = function () {
       Sfx.click(settings.sound);
-      Haptic.trigger('medium');
+      Haptic.trigger("medium");
       startNetworkHost();
     };
   }
-  
-  if ($("btnCancelNet")) {
-    $("btnCancelNet").onclick = () => {
+
+  if (DOM.btnCancelNet) {
+    DOM.btnCancelNet.onclick = function () {
       Sfx.click(settings.sound);
-      $("netModal").classList.add("hidden");
-      if (network.peer) {
-        network.peer.destroy();
-        network.peer = null;
-      }
+      DOM.netModal.classList.add("hidden");
+      if (network.peer) { network.peer.destroy(); network.peer = null; }
       network.isActive = false;
-      
-      // If we were a guest, remove ?room from URL
       if (!network.isHost) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     };
   }
 
-  if ($("btnCopyNetLink")) {
-    $("btnCopyNetLink").onclick = () => {
+  if (DOM.btnCopyNetLink) {
+    DOM.btnCopyNetLink.onclick = function () {
       Sfx.click(settings.sound);
-      const link = window.location.origin + window.location.pathname + "?room=" + network.peer.id;
-      navigator.clipboard.writeText(link).then(() => {
-        showToast("Ссылка скопирована!");
+      var link = window.location.origin + window.location.pathname + "?room=" + network.peer.id;
+      navigator.clipboard.writeText(link).then(function () {
+        showToast("\u0421\u0441\u044B\u043B\u043A\u0430 \u0441\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u043D\u0430!");
       });
     };
   }
 
-  $("tabHome").onclick      = () => { Sfx.click(settings.sound); go("home"); };
-  $("tabSettings").onclick  = () => { Sfx.click(settings.sound); go("settings"); };
+  DOM.tabHome.onclick     = function () { Sfx.click(settings.sound); go("home"); };
+  DOM.tabSettings.onclick = function () { Sfx.click(settings.sound); go("settings"); };
 
-  $("btnInfo").onclick = () => {
+  DOM.btnInfo.onclick = function () {
     Sfx.click(settings.sound);
-    const t = I18N[settings.lang];
-    $("modalTitle").textContent    = t.infoTitle;
-    $("modalText").innerHTML       = t.infoHtml;
-    $("modalCancel").style.display = "none";
-    $("modalOk").textContent       = t.infoBtnClose;
-    $("modalBack").classList.add("on");
-    $("modalOk").onclick = () => {
+    var t = I18N[settings.lang];
+    DOM.modalTitle.textContent    = t.infoTitle;
+    DOM.modalText.innerHTML       = t.infoHtml;
+    DOM.modalCancel.style.display = "none";
+    DOM.modalOk.textContent       = t.infoBtnClose;
+    DOM.modalBack.classList.add("on");
+    DOM.modalOk.onclick = function () {
       Sfx.click(settings.sound);
-      $("modalBack").classList.remove("on");
-      // Restore Cancel visibility for future confirm dialogs
-      $("modalCancel").style.display = "";
+      DOM.modalBack.classList.remove("on");
+      DOM.modalCancel.style.display = "";
     };
-    $("modalCancel").onclick = null;
+    DOM.modalCancel.onclick = null;
   };
 
-  $("btnSave").onclick = () => { Sfx.click(settings.sound); Haptic.trigger('medium'); saveAndApply(); };
+  DOM.btnSave.onclick = function () {
+    Sfx.click(settings.sound);
+    Haptic.trigger("medium");
+    saveAndApply();
+  };
 
-  $("btnSoundToggle").onclick = () => {
+  DOM.btnSoundToggle.onclick = function () {
     settings.sound = !settings.sound;
     if (settings.sound) Sfx.click(true);
     saveSettings(settings);
     renderUI();
   };
 
-  if ($("selMode")) {
-    $("selMode").onchange = () => {
-      const currentMode = $("selMode").value;
-      if ($("rowP3")) $("rowP3").style.display = (currentMode === "p3" || currentMode === "p4") ? "flex" : "none";
-      if ($("rowP4")) $("rowP4").style.display = (currentMode === "p4") ? "flex" : "none";
-      // Сохраняем промежуточное состояние, чтобы не терялось при переключении
+  if (DOM.selMode) {
+    DOM.selMode.onchange = function () {
+      var currentMode = DOM.selMode.value;
+      if (DOM.rowP3) DOM.rowP3.style.display = (currentMode === "p3" || currentMode === "p4") ? "flex" : "none";
+      if (DOM.rowP4) DOM.rowP4.style.display = (currentMode === "p4") ? "flex" : "none";
       settings.mode = currentMode;
       saveAndApply();
     };
   }
 
   // Theme dropdown
-  $("btnThemeToggle").onclick = (e) => {
+  DOM.btnThemeToggle.onclick = function (e) {
     Sfx.click(settings.sound);
-    $("themeMenu").classList.toggle("hidden");
+    DOM.themeMenu.classList.toggle("hidden");
     e.stopPropagation();
   };
 
-  document.querySelectorAll(".btn-theme-item").forEach(btn => {
-    btn.onclick = () => {
+  document.querySelectorAll(".btn-theme-item").forEach(function (btn) {
+    btn.onclick = function () {
       Sfx.click(settings.sound);
-      const chosenTheme = btn.getAttribute("data-theme");
-      
-      // Gold theme premium lock
+      var chosenTheme = btn.getAttribute("data-theme");
       if (chosenTheme === "gold" && !isPremiumUnlocked("gold_theme_unlocked")) {
-        showToast("⭐️ Золотая тема заблокирована. Купите за Telegram Stars!");
+        showToast("\u2B50\uFE0F \u0417\u043E\u043B\u043E\u0442\u0430\u044F \u0442\u0435\u043C\u0430 \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u0430. \u041A\u0443\u043F\u0438\u0442\u0435 \u0437\u0430 Telegram Stars!");
         purchaseWithStars("gold_theme_unlocked", "theme");
-        $("themeMenu").classList.add("hidden");
+        DOM.themeMenu.classList.add("hidden");
         return;
       }
-      
       settings.theme = chosenTheme;
       saveSettings(settings);
-      $("themeMenu").classList.add("hidden");
+      DOM.themeMenu.classList.add("hidden");
       applyTheme();
       renderUI();
     };
   });
 
   // Language dropdown
-  $("btnLangToggle").onclick = (e) => {
+  DOM.btnLangToggle.onclick = function (e) {
     Sfx.click(settings.sound);
-    $("langMenu").classList.toggle("hidden");
+    DOM.langMenu.classList.toggle("hidden");
     e.stopPropagation();
   };
 
-  document.addEventListener("click", () => { 
-    const lm = $("langMenu");
-    const tm = $("themeMenu");
-    if (lm) lm.classList.add("hidden"); 
-    if (tm) tm.classList.add("hidden");
+  document.addEventListener("click", function () {
+    if (DOM.langMenu)  DOM.langMenu.classList.add("hidden");
+    if (DOM.themeMenu) DOM.themeMenu.classList.add("hidden");
   });
 
-  document.querySelectorAll(".btn-lang-item").forEach(btn => {
-    btn.onclick = () => {
+  document.querySelectorAll(".btn-lang-item").forEach(function (btn) {
+    btn.onclick = function () {
       Sfx.click(settings.sound);
       settings.lang = btn.getAttribute("data-lang");
       saveSettings(settings);
-      $("langMenu").classList.add("hidden");
+      DOM.langMenu.classList.add("hidden");
       renderUI();
       syncSettingsForm();
     };
   });
-  $("selSize").onchange  = rebuildGoalSelect;
 
-  $("btnExit").onclick = async () => {
+  DOM.selSize.onchange = rebuildGoalSelect;
+
+  DOM.btnExit.onclick = function () {
     Sfx.click(settings.sound);
-    if (await modalConfirm(I18N[settings.lang].confirmExit)) {
-      board = []; gameOver = false;
-      saveGameData();
-      go("home");
-    }
+    modalConfirm(I18N[settings.lang].confirmExit).then(function (ok) {
+      if (ok) {
+        board = [];
+        gameOver = false;
+        saveGameData();
+        go("home");
+      }
+    });
   };
 
-  $("btnRestart").onclick = async () => {
+  DOM.btnRestart.onclick = function () {
     Sfx.click(settings.sound);
-    if (await modalConfirm(I18N[settings.lang].confirmNew)) startNewGame();
+    modalConfirm(I18N[settings.lang].confirmNew).then(function (ok) {
+      if (ok) startNewGame();
+    });
   };
 
-  $("btnUndo").onclick = () => {
+  DOM.btnUndo.onclick = function () {
     Sfx.click(settings.sound);
-    Haptic.trigger('light');
+    Haptic.trigger("light");
     doUndo();
   };
 
-  /* ── Try to restore saved game ── */
-  const savedGame = loadGame();
-  if (savedGame && savedGame.board && savedGame.board.length > 0 && !savedGame.gameOver) {
-    board    = savedGame.board;
-    history  = savedGame.history;
-    gameOver = savedGame.gameOver;
-    settings = { ...defaultSettings(), ...savedGame.settingsSnapshot };
-    renderGame();
-    go("game");
-  } else {
-    go("home");
-  }
-
-  /* ── Admin Panel ── */
-  if ($("btnDevPanel")) {
-    $("btnDevPanel").onclick = (e) => {
+  // Admin Panel
+  if (DOM.btnDevPanel) {
+    DOM.btnDevPanel.onclick = function (e) {
       e.preventDefault();
       Sfx.click(settings.sound);
-      $("adminModal").classList.remove("hidden");
-      $("adminLoginScreen").classList.remove("hidden");
-      $("adminDashboard").classList.add("hidden");
-      if ($("adminLoginInput")) $("adminLoginInput").value = "";
-      if ($("adminPassInput")) $("adminPassInput").value = "";
+      DOM.adminModal.classList.remove("hidden");
+      DOM.adminLoginScreen.classList.remove("hidden");
+      DOM.adminDashboard.classList.add("hidden");
+      if (DOM.adminLoginInput) DOM.adminLoginInput.value = "";
+      if (DOM.adminPassInput)  DOM.adminPassInput.value = "";
     };
   }
 
-  if ($("adminLoginBtn")) {
-    $("adminLoginBtn").onclick = () => {
-      const login = $("adminLoginInput").value.trim();
-      const pass = $("adminPassInput").value.trim();
+  if (DOM.adminLoginBtn) {
+    DOM.adminLoginBtn.onclick = function () {
+      var login = DOM.adminLoginInput.value.trim();
+      var pass  = DOM.adminPassInput.value.trim();
       if (login === "alex" && pass === "liquid4ever") {
-        $("adminLoginScreen").classList.add("hidden");
-        $("adminDashboard").classList.remove("hidden");
+        DOM.adminLoginScreen.classList.add("hidden");
+        DOM.adminDashboard.classList.remove("hidden");
         refreshAdminMonitor();
       } else {
-        showToast("❌ Неверный логин или пароль");
+        showToast("\u274C \u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u043B\u043E\u0433\u0438\u043D \u0438\u043B\u0438 \u043F\u0430\u0440\u043E\u043B\u044C");
       }
     };
   }
 
-  if ($("adminUnlockAll")) {
-    $("adminUnlockAll").onclick = () => {
+  if (DOM.adminUnlockAll) {
+    DOM.adminUnlockAll.onclick = function () {
       unlockPremium("gold_theme_unlocked");
-      PREMIUM_SKINS.forEach(s => unlockSkin(s.id));
-      showToast("✅ Всё разблокировано!");
+      PREMIUM_SKINS.forEach(function (s) { unlockSkin(s.id); });
+      showToast("\u2705 \u0412\u0441\u0451 \u0440\u0430\u0437\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043E!");
       renderUI();
     };
   }
 
-  if ($("adminClearStorage")) {
-    $("adminClearStorage").onclick = () => {
+  if (DOM.adminClearStorage) {
+    DOM.adminClearStorage.onclick = function () {
       localStorage.clear();
-      showToast("🗑️ localStorage очищен");
+      showToast("\uD83D\uDDD1\uFE0F localStorage \u043E\u0447\u0438\u0449\u0435\u043D");
       settings = defaultSettings();
       renderUI();
       syncSettingsForm();
     };
   }
 
-  if ($("adminRefreshNet")) {
-    $("adminRefreshNet").onclick = () => {
-      refreshAdminMonitor();
-    };
+  if (DOM.adminRefreshNet) {
+    DOM.adminRefreshNet.onclick = function () { refreshAdminMonitor(); };
   }
 
-  if ($("adminCloseBtn")) {
-    $("adminCloseBtn").onclick = () => {
-      $("adminModal").classList.add("hidden");
-    };
+  if (DOM.adminCloseBtn) {
+    DOM.adminCloseBtn.onclick = function () { DOM.adminModal.classList.add("hidden"); };
+  }
+
+  if (DOM.adminCloseBtn2) {
+    DOM.adminCloseBtn2.onclick = function () { DOM.adminModal.classList.add("hidden"); };
   }
 }
 
@@ -996,120 +1060,100 @@ function init() {
    NAVIGATION
    ───────────────────────────────────────────────────── */
 function go(scr) {
+  DOM.screenHome.classList.add("hidden");
+  DOM.screenSettings.classList.add("hidden");
+  DOM.screenGame.classList.add("hidden");
 
-  screenHome.classList.add("hidden");
-  screenSettings.classList.add("hidden");
-  screenGame.classList.add("hidden");
+  DOM.tabHome.classList.remove("tabOn");
+  DOM.tabSettings.classList.remove("tabOn");
 
-  ["tabHome", "tabSettings"].forEach(id => {
-    const el = $(id);
-    if(el) el.classList.remove("tabOn");
-  });
-
-  const tabbarGlobal = $("tabbarGlobal");
-  if (tabbarGlobal) tabbarGlobal.classList.remove("hidden");
+  if (DOM.tabbarGlobal) DOM.tabbarGlobal.classList.remove("hidden");
 
   if (scr === "home") {
-    screenHome.classList.remove("hidden");
-    $("tabHome").classList.add("tabOn");
-    
-    // Move indicator
-    setTimeout(() => moveTabIndicator("tabHome", "tabIndicator"), 0);
-    
+    DOM.screenHome.classList.remove("hidden");
+    DOM.tabHome.classList.add("tabOn");
+    setTimeout(function () { moveTabIndicator("tabHome"); }, 0);
     renderHomeMeta();
   } else if (scr === "settings") {
-    screenSettings.classList.remove("hidden");
-    $("tabSettings").classList.add("tabOn");
-    
-    // Move indicator
-    setTimeout(() => moveTabIndicator("tabSettings", "tabIndicator"), 0);
-    
+    DOM.screenSettings.classList.remove("hidden");
+    DOM.tabSettings.classList.add("tabOn");
+    setTimeout(function () { moveTabIndicator("tabSettings"); }, 0);
     syncSettingsForm();
   } else if (scr === "game") {
-    screenGame.classList.remove("hidden");
-    if (tabbarGlobal) tabbarGlobal.classList.add("hidden");
+    DOM.screenGame.classList.remove("hidden");
+    if (DOM.tabbarGlobal) DOM.tabbarGlobal.classList.add("hidden");
   }
 }
 
-function moveTabIndicator(btnId, indId) {
-  const btn = $(btnId);
-  const ind = $(indId);
-  if (!btn || !ind) return;
-  
-  ind.style.left = btn.offsetLeft + "px";
-  ind.style.width = btn.offsetWidth + "px";
+function moveTabIndicator(btnId) {
+  var btn = $(btnId);
+  if (!btn || !DOM.tabIndicator) return;
+  DOM.tabIndicator.style.left  = btn.offsetLeft + "px";
+  DOM.tabIndicator.style.width = btn.offsetWidth + "px";
 }
 
 /* ─────────────────────────────────────────────────────
    HOME META
    ───────────────────────────────────────────────────── */
 function renderHomeMeta() {
-  const t = I18N[settings.lang];
-  const m = MODES.find(x => x.id === settings.mode);
-  $("homeMeta").textContent = `${t[m.key]} • ${settings.size}×${settings.size}`;
+  var t = I18N[settings.lang];
+  var m = MODES.find(function (x) { return x.id === settings.mode; });
+  DOM.homeMeta.textContent = t[m.key] + " \u2022 " + settings.size + "\u00D7" + settings.size;
 }
 
 /* ─────────────────────────────────────────────────────
    SETTINGS FORM SYNC
    ───────────────────────────────────────────────────── */
 function syncSettingsForm() {
-  const t = I18N[settings.lang];
+  var t = I18N[settings.lang];
 
-
-  const selMM = $("selMatchMode");
-  if (selMM) {
-    selMM.innerHTML = `<option value="classic">${t.modClassic}</option><option value="super">${t.modSuper}</option>`;
-    selMM.value = settings.matchMode || "classic";
+  if (DOM.selMatchMode) {
+    DOM.selMatchMode.innerHTML = "<option value=\"classic\">" + t.modClassic + "</option><option value=\"super\">" + t.modSuper + "</option>";
+    DOM.selMatchMode.value = settings.matchMode || "classic";
   }
 
-  const selMode = $("selMode");
-  selMode.innerHTML = "";
-  MODES.forEach(m => {
-    const opt = document.createElement("option");
+  DOM.selMode.innerHTML = "";
+  MODES.forEach(function (m) {
+    var opt = document.createElement("option");
     opt.value = m.id;
     opt.textContent = t[m.key];
-    selMode.appendChild(opt);
+    DOM.selMode.appendChild(opt);
   });
-  selMode.value = settings.mode;
+  DOM.selMode.value = settings.mode;
 
-  // Size selector
-  const selSize = $("selSize");
-  if (selSize.options.length === 0) {
-    for (let i = 3; i <= 10; i++) {
-      const opt = document.createElement("option");
+  if (DOM.selSize.options.length === 0) {
+    for (var i = 3; i <= 10; i++) {
+      var opt = document.createElement("option");
       opt.value = i;
-      opt.textContent = `${i}×${i}`;
-      selSize.appendChild(opt);
+      opt.textContent = i + "\u00D7" + i;
+      DOM.selSize.appendChild(opt);
     }
   }
-  selSize.value = settings.size;
+  DOM.selSize.value = settings.size;
   rebuildGoalSelect();
-  $("selGoal").value = settings.goal;
+  DOM.selGoal.value = settings.goal;
 
-  // AI level selector
-  const selAI = $("selAI");
-  selAI.innerHTML = "";
-  AI_LEVELS.forEach(lvl => {
-    const opt = document.createElement("option");
+  DOM.selAI.innerHTML = "";
+  AI_LEVELS.forEach(function (lvl) {
+    var opt = document.createElement("option");
     opt.value       = lvl.id;
     opt.textContent = t[lvl.key];
-    selAI.appendChild(opt);
+    DOM.selAI.appendChild(opt);
   });
-  selAI.value = settings.ai;
+  DOM.selAI.value = settings.ai;
+  DOM.aiRow.style.display = (settings.mode === "ai") ? "block" : "none";
 
-  $("aiRow").style.display = (settings.mode === "ai") ? "block" : "none";
+  DOM.inpP1.value = settings.p1;
+  DOM.inpP2.value = settings.p2;
+  DOM.inpP3.value = settings.p3;
+  DOM.inpP4.value = settings.p4;
+  if (DOM.rowP3) DOM.rowP3.style.display = (settings.mode === "p3" || settings.mode === "p4") ? "flex" : "none";
+  if (DOM.rowP4) DOM.rowP4.style.display = (settings.mode === "p4") ? "flex" : "none";
 
-  $("inpP1").value = settings.p1;
-  $("inpP2").value = settings.p2;
-  $("inpP3").value = settings.p3;
-  $("inpP4").value = settings.p4;
-  if ($("rowP3")) $("rowP3").style.display = (settings.mode === "p3" || settings.mode === "p4") ? "flex" : "none";
-  if ($("rowP4")) $("rowP4").style.display = (settings.mode === "p4") ? "flex" : "none";
-
-  $("inpSym1").value = settings.sym1;
-  $("inpSym2").value = settings.sym2;
-  $("inpSym3").value = settings.sym3;
-  $("inpSym4").value = settings.sym4;
+  DOM.inpSym1.value = settings.sym1;
+  DOM.inpSym2.value = settings.sym2;
+  DOM.inpSym3.value = settings.sym3;
+  DOM.inpSym4.value = settings.sym4;
 
   updateStatsUI();
 }
@@ -1118,40 +1162,37 @@ function syncSettingsForm() {
    GOAL SELECT REBUILD
    ───────────────────────────────────────────────────── */
 function rebuildGoalSelect() {
-  const sz      = parseInt($("selSize").value);
-  const selGoal = $("selGoal");
-  selGoal.innerHTML = "";
-
-  for (let i = 3; i <= sz; i++) {
-    const opt = document.createElement("option");
+  var sz = parseInt(DOM.selSize.value);
+  DOM.selGoal.innerHTML = "";
+  for (var i = 3; i <= Math.min(sz, 5); i++) {
+    var opt = document.createElement("option");
     opt.value = i;
     opt.textContent = i;
-    selGoal.appendChild(opt);
+    DOM.selGoal.appendChild(opt);
   }
-
-  if (settings.goal <= sz && settings.goal >= 3) selGoal.value = settings.goal;
-  else selGoal.value = Math.min(sz, 5);
+  if (settings.goal <= sz && settings.goal >= 3) DOM.selGoal.value = settings.goal;
+  else DOM.selGoal.value = Math.min(sz, 5);
 }
 
 /* ─────────────────────────────────────────────────────
    SAVE & APPLY SETTINGS
    ───────────────────────────────────────────────────── */
 function saveAndApply() {
-  if ($("selMatchMode")) settings.matchMode = $("selMatchMode").value;
-  settings.mode = $("selMode").value;
-  settings.size = parseInt($("selSize").value) || 3;
-  settings.goal = parseInt($("selGoal").value) || 3;
-  settings.ai   = $("selAI").value;
+  if (DOM.selMatchMode) settings.matchMode = DOM.selMatchMode.value;
+  settings.mode = DOM.selMode.value;
+  settings.size = parseInt(DOM.selSize.value) || 3;
+  settings.goal = parseInt(DOM.selGoal.value) || 3;
+  settings.ai   = DOM.selAI.value;
 
-  settings.p1 = $("inpP1").value.trim() || "Player 1";
-  settings.p2 = $("inpP2").value.trim() || "Player 2";
-  settings.p3 = $("inpP3").value.trim() || "Player 3";
-  settings.p4 = $("inpP4").value.trim() || "Player 4";
+  settings.p1 = DOM.inpP1.value.trim() || "Player 1";
+  settings.p2 = DOM.inpP2.value.trim() || "Player 2";
+  settings.p3 = DOM.inpP3.value.trim() || "Player 3";
+  settings.p4 = DOM.inpP4.value.trim() || "Player 4";
 
-  settings.sym1 = Array.from($("inpSym1").value.trim())[0] || "X";
-  settings.sym2 = Array.from($("inpSym2").value.trim())[0] || "O";
-  settings.sym3 = Array.from($("inpSym3").value.trim())[0] || "△";
-  settings.sym4 = Array.from($("inpSym4").value.trim())[0] || "□";
+  settings.sym1 = Array.from(DOM.inpSym1.value.trim())[0] || "X";
+  settings.sym2 = Array.from(DOM.inpSym2.value.trim())[0] || "O";
+  settings.sym3 = Array.from(DOM.inpSym3.value.trim())[0] || "\u25B3";
+  settings.sym4 = Array.from(DOM.inpSym4.value.trim())[0] || "\u25A1";
 
   saveSettings(settings);
   applyTheme();
@@ -1160,140 +1201,147 @@ function saveAndApply() {
 }
 
 /* ─────────────────────────────────────────────────────
-   GAME: START
+   SUPER MODE — SYNCHRONOUS DRAFT PHASE
    ───────────────────────────────────────────────────── */
 function startDraftPhase() {
-  const t = I18N[settings.lang];
-  // Инициализируем только если ещё не инициализировано (для сетевой синхронизации)
+  var t = I18N[settings.lang];
   if (!superMode.playerDecks[0]) superMode.playerDecks = { 0: [], 1: [], 2: [], 3: [] };
   if (!superMode.usedAbilities[0]) superMode.usedAbilities = { 0: [], 1: [], 2: [], 3: [] };
+  superMode.frozenCells = {};
+  superMode.shieldedCells = {};
   superMode.draftTurnIndex = 0;
-  
+
   superMode.draftOrder = [0, 1];
   if (settings.mode === "p3") superMode.draftOrder = [0, 1, 2];
   if (settings.mode === "p4") superMode.draftOrder = [0, 1, 2, 3];
-  if (settings.mode === "ai") superMode.draftOrder = [0, 1]; // AI всегда 2 игрока
-  
+  if (settings.mode === "ai") superMode.draftOrder = [0, 1];
+
   renderDraftGrid();
   startDraftTimer();
 }
 
 function startDraftTimer() {
   if (draftTimerInterval) clearInterval(draftTimerInterval);
-  let timeLeft = 20;
-  const el = $("draftTimerNum");
-  if (el) el.textContent = timeLeft;
-  
-  draftTimerInterval = setInterval(() => {
+  var timeLeft = 20;
+  if (DOM.draftTimerNum) DOM.draftTimerNum.textContent = timeLeft;
+
+  draftTimerInterval = setInterval(function () {
     timeLeft--;
-    if (el) el.textContent = timeLeft;
-    
+    if (DOM.draftTimerNum) DOM.draftTimerNum.textContent = timeLeft;
+
     if (timeLeft <= 0) {
       clearInterval(draftTimerInterval);
       draftTimerInterval = null;
-      
-      let myIdx = network.isActive ? (network.isHost ? 0 : 1) : null;
-      
-      // Auto-fill missing abilities
-      for (let p of superMode.draftOrder) {
+
+      var myIdx = network.isActive ? (network.isHost ? 0 : 1) : null;
+
+      // Auto-fill missing abilities via random ID generation
+      for (var pi = 0; pi < superMode.draftOrder.length; pi++) {
+        var p = superMode.draftOrder[pi];
         if (network.isActive && p !== myIdx) continue;
-        let deck = superMode.playerDecks[p] || [];
-        let available = [];
-        for (let i = 0; i < 10; i++) {
-          if (!deck.includes(i)) available.push(i);
+        superMode.playerDecks[p] = superMode.playerDecks[p] || [];
+        var deck = superMode.playerDecks[p];
+        var available = [];
+        for (var ai = 0; ai < 10; ai++) {
+          if (deck.indexOf(ai) === -1) available.push(ai);
         }
         while (deck.length < 3 && available.length > 0) {
-          let r = Math.floor(Math.random() * available.length);
-          deck.push(available[r]);
-          available.splice(r, 1);
+          var ri = Math.floor(Math.random() * available.length);
+          deck.push(available[ri]);
+          available.splice(ri, 1);
         }
       }
-      
+
+      // Broadcast PLAYER_READY
       if (network.isActive && network.conn && network.conn.open) {
-        const pkt = {
+        var pkt = {
           type: "PLAYER_READY",
           playerIdx: myIdx,
           deck: superMode.playerDecks[myIdx]
         };
-        pushNetLog('OUT', pkt);
+        pushNetLog("OUT", pkt);
         network.conn.send(pkt);
       }
-      
+
       renderDraftGrid();
     }
   }, 1000);
 }
 
 function renderDraftGrid() {
-  const t = I18N[settings.lang];
-  const grid = $("draftGrid");
-  const sub = $("draftSubtitle");
-  if (!grid || !sub) return;
-  
-  grid.innerHTML = "";
-  
-  let hostDeck = superMode.playerDecks[0] || [];
-  let guestDeck = superMode.playerDecks[1] || [];
-  
-  // Если локальный игрок (Хост или Гость) набрал свои 3 карты, мы блокируем ему дальнейший клик и шлем пакет готовности
-  let myIdx = network.isHost ? 0 : 1;
-  if (superMode.playerDecks[myIdx] && superMode.playerDecks[myIdx].length >= 3) {
-    sub.textContent = "Ожидание соперника...";
-    if (network.isActive && network.conn && network.conn.open) {
-      const pkt = {
+  var t = I18N[settings.lang];
+  if (!DOM.draftGrid || !DOM.draftSubtitle) return;
+
+  DOM.draftGrid.innerHTML = "";
+
+  var hostDeck  = superMode.playerDecks[0] || [];
+  var guestDeck = superMode.playerDecks[1] || [];
+
+  var myIdx = network.isActive ? (network.isHost ? 0 : 1) : null;
+
+  // Lock when local player has 3 cards, send PLAYER_READY
+  if (network.isActive && superMode.playerDecks[myIdx] && superMode.playerDecks[myIdx].length >= 3) {
+    DOM.draftSubtitle.textContent = t.draftWaiting;
+    if (network.conn && network.conn.open) {
+      var readyPkt = {
         type: "PLAYER_READY",
         playerIdx: myIdx,
         deck: superMode.playerDecks[myIdx]
       };
-      pushNetLog('OUT', pkt);
-      network.conn.send(pkt);
+      pushNetLog("OUT", readyPkt);
+      network.conn.send(readyPkt);
     }
   }
 
-  // Игра РЕАЛЬНО начинается только тогда, когда в ОБОИХ колодах есть по 3 карты!
-  if (hostDeck.length >= 3 && guestDeck.length >= 3) {
+  // Game starts only when BOTH decks have 3 cards
+  var allReady = true;
+  for (var oi = 0; oi < superMode.draftOrder.length; oi++) {
+    var deckCheck = superMode.playerDecks[superMode.draftOrder[oi]] || [];
+    if (deckCheck.length < 3) { allReady = false; break; }
+  }
+
+  if (allReady) {
     if (draftTimerInterval) { clearInterval(draftTimerInterval); draftTimerInterval = null; }
-    $("screenDraft").classList.add("hidden");
-    
-    // Полный жесткий сброс игрового поля перед стартом
+    DOM.screenDraft.classList.add("hidden");
     board = Array(settings.size * settings.size).fill("");
     history = [];
     gameOver = false;
     winLine = [];
-    
     renderGame();
+    go("game");
     return;
   }
-  
-  // Для AI режима: если игрок выбрал 3 карты, ждём пока бот тоже выберет
+
+  // AI auto-draft
   if (settings.mode === "ai" && hostDeck.length >= 3 && guestDeck.length < 3) {
-    sub.textContent = "🤖 Бот выбирает карты...";
+    DOM.draftSubtitle.textContent = t.draftBotPicking;
   }
-  
-  let activePlayerIdx = superMode.draftOrder[superMode.draftTurnIndex % superMode.draftOrder.length];
-  
-  // Проверка на лимит игрока (макс 3 карты)
+
+  var activePlayerIdx = superMode.draftOrder[superMode.draftTurnIndex % superMode.draftOrder.length];
+  superMode.playerDecks[activePlayerIdx] = superMode.playerDecks[activePlayerIdx] || [];
+
   while (superMode.playerDecks[activePlayerIdx].length >= 3) {
     superMode.draftTurnIndex++;
     activePlayerIdx = superMode.draftOrder[superMode.draftTurnIndex % superMode.draftOrder.length];
+    superMode.playerDecks[activePlayerIdx] = superMode.playerDecks[activePlayerIdx] || [];
   }
-  
-  let pName = getPlayerName(activePlayerIdx);
-  sub.textContent = t.draftSub(pName, superMode.playerDecks[activePlayerIdx].length);
-  
-  // Логика автоматического драфта ИИ
+
+  var pName = getPlayerName(activePlayerIdx);
+  DOM.draftSubtitle.textContent = t.draftSub(pName, superMode.playerDecks[activePlayerIdx].length);
+
+  // AI draft logic (priority: Thor, Hack, Blitzkrieg)
   if (settings.mode === "ai" && activePlayerIdx === 1) {
-    setTimeout(() => {
-      let available = [];
-      for (let i = 0; i < 10; i++) {
-        if (!superMode.playerDecks[1].includes(i)) available.push(i);
+    setTimeout(function () {
+      superMode.playerDecks[1] = superMode.playerDecks[1] || [];
+      var available = [];
+      for (var ai = 0; ai < 10; ai++) {
+        if (superMode.playerDecks[1].indexOf(ai) === -1) available.push(ai);
       }
-      // AI выбирает более умно: приоритет атакующим способностям (Thor, Hack)
-      const priorityAbilities = [0, 1, 6]; // Thor, Hack, Blitzkrieg
-      let bestChoice = -1;
-      for (let p of priorityAbilities) {
-        if (available.includes(p)) {
-          bestChoice = p;
+      var priorityAbilities = [0, 1, 6];
+      var bestChoice = -1;
+      for (var pi = 0; pi < priorityAbilities.length; pi++) {
+        if (available.indexOf(priorityAbilities[pi]) !== -1) {
+          bestChoice = priorityAbilities[pi];
           break;
         }
       }
@@ -1306,140 +1354,124 @@ function renderDraftGrid() {
     }, 400);
     return;
   }
-  
-  // Рендер 10 карточек в стиле Монополии
-  t.abilitiesData.forEach((ab, idx) => {
-    const card = document.createElement("div");
-    card.className = "ability-card";
-    card.style.display = "flex";
-    card.style.flexDirection = "row";
-    card.style.alignItems = "center";
-    card.style.width = "100%";
-    card.style.background = "var(--glass-bg)";
-    card.style.border = "1px solid var(--glass-border)";
-    card.style.borderRadius = "12px";
-    card.style.padding = "10px 14px";
-    card.style.textAlign = "left";
-    card.style.boxSizing = "border-box";
-    card.style.gap = "0px";
 
-    if (superMode.playerDecks[activePlayerIdx].includes(idx)) {
-      card.style.opacity = "0.4";
-      card.style.border = "1px solid var(--gold)";
+  // Render 10 ability cards (Anti-Clipped Layout per PRD)
+  t.abilitiesData.forEach(function (ab, idx) {
+    var card = document.createElement("div");
+    card.className = "draft-card-row";
+
+    if (superMode.playerDecks[activePlayerIdx].indexOf(idx) !== -1) {
+      card.classList.add("picked");
     }
 
-    card.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 60px; min-width: 60px; flex-shrink: 0; margin-right: 16px; box-sizing: border-box; text-align: center;">
-        <span style="font-size: 24px; line-height: 1; display: block; margin-bottom: 3px;">${ab.emoji}</span>
-        <span class="cat-${ab.cat}" style="font-size: 8px; font-weight: 900; padding: 2px 0; border-radius: 4px; color: #fff; text-transform: uppercase; display: block; text-align: center; width: 100%; box-sizing: border-box; line-height: 1.2;">${ab.cat}</span>
-      </div>
-      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; min-width: 0; box-sizing: border-box; text-align: left;">
-        <div style="font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 2px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ab.name}</div>
-        <div style="font-size: 11px; opacity: 0.8; color: var(--text); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">${ab.desc}</div>
-      </div>
-    `;
+    card.innerHTML =
+      '<div class="draft-card-left">' +
+        '<span class="card-emoji">' + ab.emoji + '</span>' +
+        '<span class="card-cat cat-' + ab.cat + '">' + ab.cat + '</span>' +
+      '</div>' +
+      '<div class="draft-card-right">' +
+        '<div class="card-name">' + ab.name + '</div>' +
+        '<div class="card-desc">' + ab.desc + '</div>' +
+      '</div>';
 
-    card.onclick = () => {
-      if (superMode.playerDecks[activePlayerIdx].includes(idx)) return;
-      
+    card.onclick = function () {
+      if (superMode.playerDecks[activePlayerIdx].indexOf(idx) !== -1) return;
       if (network.isActive) {
         if (network.isHost && activePlayerIdx !== 0) return;
         if (!network.isHost && activePlayerIdx !== 1) return;
       }
-      
       Sfx.click(settings.sound);
-      Haptic.trigger('light');
+      Haptic.trigger("light");
       superMode.playerDecks[activePlayerIdx].push(idx);
-      
+
       if (network.isActive && network.conn && network.conn.open) {
-        const pkt = {
-          type: "DRAFT_SELECT",
-          playerIdx: activePlayerIdx,
-          abilityId: idx
-        };
-        pushNetLog('OUT', pkt);
+        var pkt = { type: "DRAFT_SELECT", playerIdx: activePlayerIdx, abilityId: idx };
+        pushNetLog("OUT", pkt);
         network.conn.send(pkt);
       }
-      
+
       superMode.draftTurnIndex++;
       renderDraftGrid();
     };
-    grid.appendChild(card);
+
+    DOM.draftGrid.appendChild(card);
   });
 }
 
+/* ─────────────────────────────────────────────────────
+   ABILITIES BAR (in-game)
+   ───────────────────────────────────────────────────── */
 function renderAbilitiesBar() {
-  const bar = document.getElementById("gameAbilitiesBar");
-  if (!bar) return;
-  bar.innerHTML = "";
-  
+  if (!DOM.gameAbilitiesBar) return;
+  DOM.gameAbilitiesBar.innerHTML = "";
+
   if (settings.matchMode !== "super" || gameOver) return;
-  
-  const t = I18N[settings.lang];
-  // Определяем текущего игрока (0, 1, 2, 3)
-  let pIdx = history.length % getPlayersCount(); 
-  let deck = superMode.playerDecks[pIdx] || [];
-  
-  deck.forEach(abId => {
-    const ab = t.abilitiesData[abId];
+
+  var t = I18N[settings.lang];
+  var pIdx = history.length % getPlayersCount();
+  var deck = superMode.playerDecks[pIdx] || [];
+
+  deck.forEach(function (abId) {
+    var ab = t.abilitiesData[abId];
     if (!ab) return;
-    
-    const card = document.createElement("div");
+
+    var card = document.createElement("div");
     card.className = "ability-card";
     card.style.flex = "1";
     card.style.maxWidth = "110px";
     card.style.minWidth = "80px";
-    
-    if (superMode.usedAbilities[pIdx] && superMode.usedAbilities[pIdx].includes(abId)) {
+
+    superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
+    if (superMode.usedAbilities[pIdx].indexOf(abId) !== -1) {
       card.classList.add("used");
     }
     if (superMode.activeAbility === abId) {
       card.classList.add("active-perk");
     }
-    
-    const name = ab.name || "";
-    // Добавляем emoji, короткое имя и категорию в верстку
-    card.innerHTML = `
-      <div class="card-header cat-${ab.cat}" style="font-size:9px; padding:3px 2px;">${ab.emoji} ${ab.cat.toUpperCase()}</div>
-      <div style="padding:4px; text-align:center; font-size:11px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</div>
-    `;
-    
-    card.onclick = (e) => {
+
+    card.innerHTML =
+      '<div class="card-header cat-' + ab.cat + '">' + ab.emoji + ' ' + ab.cat.toUpperCase() + '</div>' +
+      '<div style="padding:4px;text-align:center;font-size:11px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + ab.name + '</div>';
+
+    card.onclick = function (e) {
       e.stopPropagation();
-      if (superMode.usedAbilities[pIdx] && superMode.usedAbilities[pIdx].includes(abId)) return;
-      
-      // Check if network mode and not our turn
+      superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
+      if (superMode.usedAbilities[pIdx].indexOf(abId) !== -1) return;
+
       if (network.isActive) {
         if (network.isHost && pIdx !== 0) return;
         if (!network.isHost && pIdx !== 1) return;
       }
-      
+
       Sfx.click(settings.sound);
-      Haptic.trigger('medium');
-      
+      Haptic.trigger("medium");
+
       if (superMode.activeAbility === abId) {
         superMode.activeAbility = null;
-        showToast("Способность отменена");
+        showToast("\u0421\u043F\u043E\u0441\u043E\u0431\u043D\u043E\u0441\u0442\u044C \u043E\u0442\u043C\u0435\u043D\u0435\u043D\u0430");
       } else {
         superMode.activeAbility = abId;
-        showToast(`Активировано: ${ab.name}. Нажми на клетку!`);
-        
-        // Моментальный Блицкриг (id: 6) без выбора клетки
+        showToast("\u0410\u043A\u0442\u0438\u0432\u0438\u0440\u043E\u0432\u0430\u043D\u043E: " + ab.name + ". \u041D\u0430\u0436\u043C\u0438 \u043D\u0430 \u043A\u043B\u0435\u0442\u043A\u0443!");
+
+        // Blitzkrieg (id: 6) — instant, no cell selection
         if (abId === 6) {
           superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
           superMode.usedAbilities[pIdx].push(6);
           superMode.activeAbility = null;
-          // Виртуальный пасс — idx: -1 означает "бонусный ход", не трогает доску
-          history.push({ idx: -1, p: pIdx }); 
-          showToast("👟 Блицкриг! +1 Ход");
+          history.push({ idx: -1, p: pIdx });
+          showToast("\uD83D\uDC5F \u0411\u043B\u0438\u0446\u043A\u0440\u0438\u0433! +1 \u0425\u043E\u0434");
         }
       }
       renderGame();
       renderAbilitiesBar();
     };
-    bar.appendChild(card);
+    DOM.gameAbilitiesBar.appendChild(card);
   });
 }
+
+/* ─────────────────────────────────────────────────────
+   GAME: START
+   ───────────────────────────────────────────────────── */
 function startNewGame() {
   board    = Array(settings.size * settings.size).fill("");
   history  = [];
@@ -1451,144 +1483,184 @@ function startNewGame() {
 }
 
 /* ─────────────────────────────────────────────────────
-   GAME: RENDER
+   GAME: RENDER (batched, single-pass DOM build)
    ───────────────────────────────────────────────────── */
 function renderGame() {
-  const t   = I18N[settings.lang];
-  const bEl = $("board");
+  var t   = I18N[settings.lang];
+  var bEl = DOM.board;
 
-  bEl.style.gridTemplateColumns = `repeat(${settings.size}, 1fr)`;
-  bEl.style.gridTemplateRows    = `repeat(${settings.size}, 1fr)`;
+  bEl.style.gridTemplateColumns = "repeat(" + settings.size + ", 1fr)";
+  bEl.style.gridTemplateRows    = "repeat(" + settings.size + ", 1fr)";
 
-  const gap = settings.size > 6 ? 4 : 7;
+  var gap = settings.size > 6 ? 4 : 7;
   bEl.style.gap = gap + "px";
 
-  const fs = Math.max(14, 54 - settings.size * 3.5);
+  var fs = Math.max(14, 54 - settings.size * 3.5);
   bEl.style.setProperty("--cell-fs", fs + "px");
 
-  bEl.innerHTML = "";
+  // Build all cells in a document fragment (zero layout thrashing)
+  var frag = document.createDocumentFragment();
 
-  board.forEach((val, idx) => {
-    const c = document.createElement("div");
+  for (var idx = 0; idx < board.length; idx++) {
+    var val = board[idx];
+    var c = document.createElement("div");
     c.className = "cell";
 
     if (val) {
-      const sp = document.createElement("span");
-      let displayVal = val;
+      var sp = document.createElement("span");
+      var displayVal = val;
       if (val === "X") displayVal = settings.sym1;
       else if (val === "O") displayVal = settings.sym2;
-      else if (val === "△") displayVal = settings.sym3;
-      else if (val === "□") displayVal = settings.sym4;
-      
+      else if (val === "\u25B3") displayVal = settings.sym3;
+      else if (val === "\u25A1") displayVal = settings.sym4;
+
       sp.className   = "sym sym" + val;
       sp.textContent = displayVal;
       c.appendChild(sp);
     }
 
-    if (winLine.includes(idx)) c.classList.add("cellWin");
-    if (gameOver || val)       c.classList.add("cellDisabled");
+    if (winLine.indexOf(idx) !== -1) c.classList.add("cellWin");
+    if (gameOver || val) c.classList.add("cellDisabled");
 
-    c.onclick = () => {
-      if (network.isActive) {
-        let currentSymbol = SYMBOLS[history.length % getPlayersCount()];
-        if (network.isHost && currentSymbol !== "X") { showToast("Сейчас ход соперника!"); return; }
-        if (!network.isHost && currentSymbol !== "O") { showToast("Сейчас ход соперника!"); return; }
-      }
-      executeCellClick(idx, true);
-    };
-    bEl.appendChild(c);
-  });
+    // Frozen cell visual
+    if (superMode.frozenCells && superMode.frozenCells[idx] && superMode.frozenCells[idx] > 0) {
+      c.classList.add("cellFrozen");
+      c.classList.add("cellDisabled");
+    }
 
-  const curP  = history.length % getPlayersCount();
-  const pName = getPlayerName(curP);
+    (function (cellIdx) {
+      c.onclick = function () {
+        // P2P turn validation by symbol (Host=X, Guest=O)
+        if (network.isActive) {
+          var currentSymbol = SYMBOLS[history.length % getPlayersCount()];
+          if (network.isHost && currentSymbol !== "X") {
+            showToast("\u0421\u0435\u0439\u0447\u0430\u0441 \u0445\u043E\u0434 \u0441\u043E\u043F\u0435\u0440\u043D\u0438\u043A\u0430!");
+            return;
+          }
+          if (!network.isHost && currentSymbol !== "O") {
+            showToast("\u0421\u0435\u0439\u0447\u0430\u0441 \u0445\u043E\u0434 \u0441\u043E\u043F\u0435\u0440\u043D\u0438\u043A\u0430!");
+            return;
+          }
+        }
+        executeCellClick(cellIdx, true);
+      };
+    })(idx);
+
+    frag.appendChild(c);
+  }
+
+  bEl.innerHTML = "";
+  bEl.appendChild(frag);
+
+  // Turn info
+  var curP  = history.length % getPlayersCount();
+  var pName = getPlayerName(curP);
 
   if (gameOver) {
     if (winLine.length) {
-      $("turnTitle").textContent = t.win + " " + getPlayerName(SYMBOLS.indexOf(board[winLine[0]]));
+      DOM.turnTitle.textContent = t.win + " " + getPlayerName(SYMBOLS.indexOf(board[winLine[0]]));
     } else {
-      $("turnTitle").textContent = t.draw;
+      DOM.turnTitle.textContent = t.draw;
     }
   } else {
-    $("turnTitle").textContent = t.turn(pName, SYMBOLS[curP]);
+    DOM.turnTitle.textContent = t.turn(pName);
   }
 
-  $("turnSub").textContent = t.sub(settings.size, settings.goal);
+  DOM.turnSub.textContent = t.sub(settings.size, settings.goal);
+  DOM.btnUndo.disabled     = (history.length === 0 || gameOver);
+  DOM.btnUndo.style.opacity = DOM.btnUndo.disabled ? "0.45" : "1";
 
-  $("btnUndo").disabled     = (history.length === 0 || gameOver);
-  $("btnUndo").style.opacity = $("btnUndo").disabled ? "0.45" : "1";
-  
   renderAbilitiesBar();
 }
 
-function executeCellClick(idx, isLocal = false) {
+/* ─────────────────────────────────────────────────────
+   GAME: CELL CLICK (ability execution matrix)
+   ───────────────────────────────────────────────────── */
+function executeCellClick(idx, isLocal) {
+  isLocal = isLocal !== false;
+
   if (settings.matchMode === "super" && superMode.activeAbility !== null) {
-    let pIdx = history.length % getPlayersCount();
-    let abilityUsed = superMode.activeAbility;
-    
-    if (superMode.activeAbility === 0) { // Удар Тора
+    var pIdx = history.length % getPlayersCount();
+    var abilityUsed = superMode.activeAbility;
+    superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
+
+    // Thor's Strike (id: 0)
+    if (superMode.activeAbility === 0) {
       if (board[idx] !== "") {
         board[idx] = "";
-        superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
         superMode.usedAbilities[pIdx].push(0);
         superMode.activeAbility = null;
-        showToast("💥 Клетка выжжена!");
-        
+        showToast("\uD83D\uDCA5 \u041A\u043B\u0435\u0442\u043A\u0430 \u0432\u044B\u0436\u0436\u0435\u043D\u0430!");
         if (isLocal && network.isActive && network.conn && network.conn.open) {
-          const pkt = { type: "MOVE", cellIndex: idx, abilityId: abilityUsed };
-          pushNetLog('OUT', pkt);
+          var pkt = { type: "MOVE", cellIndex: idx, abilityId: abilityUsed };
+          pushNetLog("OUT", pkt);
           network.conn.send(pkt);
         }
-        
         renderGame();
-        renderAbilitiesBar();
         return;
       }
+      return;
     }
-    
-    if (superMode.activeAbility === 1) { // Хакинг
+
+    // Hacking (id: 1)
+    if (superMode.activeAbility === 1) {
       if (board[idx] !== "" && board[idx] !== SYMBOLS[pIdx]) {
         board[idx] = SYMBOLS[pIdx];
-        superMode.usedAbilities[pIdx] = superMode.usedAbilities[pIdx] || [];
         superMode.usedAbilities[pIdx].push(1);
         superMode.activeAbility = null;
-        showToast("🔄 Фигура взломана!");
-        
+        showToast("\uD83D\uDD04 \u0424\u0438\u0433\u0443\u0440\u0430 \u0432\u0437\u043B\u043E\u043C\u0430\u043D\u0430!");
         if (isLocal && network.isActive && network.conn && network.conn.open) {
-          const pkt = { type: "MOVE", cellIndex: idx, abilityId: abilityUsed };
-          pushNetLog('OUT', pkt);
-          network.conn.send(pkt);
+          var pkt2 = { type: "MOVE", cellIndex: idx, abilityId: abilityUsed };
+          pushNetLog("OUT", pkt2);
+          network.conn.send(pkt2);
         }
-        
         renderGame();
-        renderAbilitiesBar();
         return;
       }
+      return;
     }
+
     return;
   }
+
   makeMove(idx, isLocal);
 }
 
 /* ─────────────────────────────────────────────────────
    GAME: MAKE MOVE
    ───────────────────────────────────────────────────── */
-function makeMove(idx, isLocal = false) {
+function makeMove(idx, isLocal) {
+  isLocal = isLocal !== false;
   if (gameOver || board[idx]) return;
 
-  Sfx.pop(settings.sound);
-  Haptic.trigger('light');
+  // Check frozen cells
+  if (superMode.frozenCells && superMode.frozenCells[idx] && superMode.frozenCells[idx] > 0) return;
 
-  const pIdx  = history.length % getPlayersCount();
-  board[idx]  = SYMBOLS[pIdx];
-  history.push({ idx, p: pIdx });
+  Sfx.pop(settings.sound);
+  Haptic.trigger("light");
+
+  var pIdx  = history.length % getPlayersCount();
+  board[idx] = SYMBOLS[pIdx];
+  history.push({ idx: idx, p: pIdx });
+
+  // Decrement frozen cell counters
+  if (superMode.frozenCells) {
+    var frozenKeys = Object.keys(superMode.frozenCells);
+    for (var fi = 0; fi < frozenKeys.length; fi++) {
+      superMode.frozenCells[frozenKeys[fi]]--;
+      if (superMode.frozenCells[frozenKeys[fi]] <= 0) {
+        delete superMode.frozenCells[frozenKeys[fi]];
+      }
+    }
+  }
 
   if (isLocal && network.isActive && network.conn && network.conn.open) {
-    const pkt = {
+    var pkt = {
       type: "MOVE",
       cellIndex: idx,
       abilityId: superMode.activeAbility
     };
-    pushNetLog('OUT', pkt);
+    pushNetLog("OUT", pkt);
     network.conn.send(pkt);
   }
 
@@ -1599,76 +1671,82 @@ function makeMove(idx, isLocal = false) {
   // AI's turn
   if (!gameOver && settings.mode === "ai" && getPlayersCount() === 2) {
     if ((history.length % 2) === 1) {
-      setTimeout(() => {
+      setTimeout(function () {
+        // AI Super Mode: evaluate abilities using localized simulation
         if (settings.matchMode === "super") {
-          let botDecks = superMode.playerDecks[1] || [];
-          let usedAbilities = superMode.usedAbilities[1] || [];
-          
-          let hasThor = botDecks.includes(0) && !usedAbilities.includes(0);
-          let hasHack = botDecks.includes(1) && !usedAbilities.includes(1);
-          
+          var botDecks = superMode.playerDecks[1] || [];
+          superMode.usedAbilities[1] = superMode.usedAbilities[1] || [];
+          var usedAb = superMode.usedAbilities[1];
+
+          var hasThor = botDecks.indexOf(0) !== -1 && usedAb.indexOf(0) === -1;
+          var hasHack = botDecks.indexOf(1) !== -1 && usedAb.indexOf(1) === -1;
+
           if (hasThor || hasHack) {
-            let p0Threat = false;
-            for (let i = 0; i < board.length; i++) {
-              if (board[i] === "") {
-                board[i] = SYMBOLS[0];
+            // p0Threat simulation inside localized loop (no structural mutation)
+            var p0Threat = false;
+            for (var ti = 0; ti < board.length; ti++) {
+              if (board[ti] === "") {
+                var savedVal = board[ti];
+                board[ti] = SYMBOLS[0];
                 if (checkWinSimple(board, settings.size, settings.goal)) p0Threat = true;
-                board[i] = "";
+                board[ti] = savedVal;
               }
             }
-            
-            let abilityFired = false;
-            // Hack logic
+
+            var abilityFired = false;
+
+            // Hack logic — simulate inside localized loop
             if (hasHack && !abilityFired) {
-              for (let i = 0; i < board.length; i++) {
-                if (board[i] === SYMBOLS[0]) {
-                  const saved = board[i];
-                  board[i] = SYMBOLS[1];
-                  const wouldWin = checkWinSimple(board, settings.size, settings.goal);
-                  board[i] = saved;
+              for (var hi = 0; hi < board.length; hi++) {
+                if (board[hi] === SYMBOLS[0]) {
+                  var savedHack = board[hi];
+                  board[hi] = SYMBOLS[1];
+                  var wouldWin = checkWinSimple(board, settings.size, settings.goal);
+                  board[hi] = savedHack;
                   if (wouldWin || p0Threat) {
                     superMode.activeAbility = 1;
-                    executeCellClick(i, false);
+                    executeCellClick(hi, false);
                     abilityFired = true;
                     break;
                   }
                 }
               }
             }
+
             // Thor logic
             if (hasThor && !abilityFired && p0Threat) {
-              let p0Cells = [];
-              for(let i=0; i<board.length; i++) if(board[i] === SYMBOLS[0]) p0Cells.push(i);
+              var p0Cells = [];
+              for (var thi = 0; thi < board.length; thi++) {
+                if (board[thi] === SYMBOLS[0]) p0Cells.push(thi);
+              }
               if (p0Cells.length > 0) {
-                let cellToDestroy = p0Cells[Math.floor(Math.random() * p0Cells.length)];
+                var cellToDestroy = p0Cells[Math.floor(Math.random() * p0Cells.length)];
                 superMode.activeAbility = 0;
                 executeCellClick(cellToDestroy, false);
               }
             }
           }
         }
-        
-        // Wait, if AI used an ability, we should re-evaluate or just let it make a move?
-        // The user says: "После применения суперспособности бот завершает ход".
-        // But the game logic dictates ability doesn't advance turn. So the bot MUST make a regular move too!
-        const aiMove = getBotMove(board, settings, SYMBOLS);
-        if (aiMove !== -1) makeMove(aiMove);
+
+        var aiMove = getBotMove(board, settings, SYMBOLS);
+        if (aiMove !== -1) makeMove(aiMove, false);
       }, 400);
     }
   }
 }
 
 /* ─────────────────────────────────────────────────────
-   GAME: UNDO
+   GAME: UNDO (skips Blitzkrieg idx:-1 entries)
    ───────────────────────────────────────────────────── */
 function doUndo() {
   if (!history.length) return;
-  const last = history.pop();
+
+  var last = history.pop();
   if (last.idx !== -1) board[last.idx] = "";
 
   // In AI mode undo two moves (player + AI)
   if (settings.mode === "ai" && history.length > 0) {
-    const last2 = history.pop();
+    var last2 = history.pop();
     if (last2.idx !== -1) board[last2.idx] = "";
   }
 
@@ -1682,38 +1760,44 @@ function doUndo() {
    GAME: WIN CHECK
    ───────────────────────────────────────────────────── */
 function checkWinCondition() {
-  const res = checkWinFull(board, settings.size, settings.goal);
+  var res = checkWinFull(board, settings.size, settings.goal);
   if (res.win) {
     gameOver = true;
     winLine  = res.line;
     Sfx.win(settings.sound);
-    Haptic.trigger('heavy');
+    Haptic.trigger("heavy");
     Confetti.start();
-    
+
     settings.gamesPlayed = (settings.gamesPlayed || 0) + 1;
-    const myIdx = network.isActive ? (network.isHost ? 0 : 1) : 0;
+    var myIdx = network.isActive ? (network.isHost ? 0 : 1) : 0;
     if (board[winLine[0]] === SYMBOLS[myIdx]) {
       settings.gamesWon = (settings.gamesWon || 0) + 1;
-      
-      // PvE Progress
       if (settings.mode === "ai") {
         settings.pveXp = (settings.pveXp || 0) + 20;
         if (settings.pveXp >= 100) {
           settings.pveLevel = (settings.pveLevel || 1) + 1;
           settings.pveXp = 0;
-          setTimeout(() => {
+          setTimeout(function () {
             showToast("Level Up! New Level: " + settings.pveLevel);
             Confetti.start();
           }, 800);
         }
       }
+    } else {
+      Sfx.lose(settings.sound);
     }
     saveSettings(settings);
-    
-  } else if (history.length === settings.size * settings.size) {
-    gameOver = true;
-    settings.gamesPlayed = (settings.gamesPlayed || 0) + 1;
-    saveSettings(settings);
+  } else {
+    // Check draw — count non-empty cells (accounting for Blitzkrieg phantom entries)
+    var filledCells = 0;
+    for (var di = 0; di < board.length; di++) {
+      if (board[di] !== "") filledCells++;
+    }
+    if (filledCells === board.length) {
+      gameOver = true;
+      settings.gamesPlayed = (settings.gamesPlayed || 0) + 1;
+      saveSettings(settings);
+    }
   }
 }
 
@@ -1721,122 +1805,115 @@ function checkWinCondition() {
    HELPERS
    ───────────────────────────────────────────────────── */
 function getPlayersCount() {
-  return MODES.find(m => m.id === settings.mode).players;
+  var m = MODES.find(function (m2) { return m2.id === settings.mode; });
+  return m ? m.players : 2;
 }
 
 function getPlayerName(idx) {
+  // Mirrored Identity Layout: local client always position 1
   if (network.isActive) {
     if (network.isHost) {
-      // Для Хоста: 0 — это он сам, 1 — это Гость
-      return idx === 0 ? "👑 Игрок 1 (Вы)" : "⚡ Игрок 2 (Соперник)";
+      return idx === 0
+        ? "\uD83D\uDC51 \u0418\u0433\u0440\u043E\u043A 1 (\u0412\u044B)"
+        : "\u26A1 \u0418\u0433\u0440\u043E\u043A 2 (\u0421\u043E\u043F\u0435\u0440\u043D\u0438\u043A)";
     } else {
-      // Для Гостя: 1 — это он сам, 0 — это Хост
-      return idx === 1 ? "👑 Игрок 1 (Вы)" : "⚡ Игрок 2 (Соперник)";
+      return idx === 1
+        ? "\uD83D\uDC51 \u0418\u0433\u0440\u043E\u043A 1 (\u0412\u044B)"
+        : "\u26A1 \u0418\u0433\u0440\u043E\u043A 2 (\u0421\u043E\u043F\u0435\u0440\u043D\u0438\u043A)";
     }
   }
-  if (idx === 0) return "👑 " + settings.p1;
-  if (idx === 1) return settings.mode === "ai" ? "🤖 AI" : "⚡ " + settings.p2;
+  if (idx === 0) return "\uD83D\uDC51 " + settings.p1;
+  if (idx === 1) return settings.mode === "ai" ? "\uD83E\uDD16 AI" : "\u26A1 " + settings.p2;
   if (idx === 2) return settings.p3;
   if (idx === 3) return settings.p4;
   return "Player";
 }
 
 function updateStatsUI() {
-  const t = I18N[settings.lang];
-  const lblStatsTitle = $("lblStatsTitle");
-  if (!lblStatsTitle) return;
-  
-  lblStatsTitle.textContent = t.statsTitle;
-  
-  const played = settings.gamesPlayed || 0;
-  const won = settings.gamesWon || 0;
-  const winrate = played > 0 ? Math.round((won / played) * 100) : 0;
-  
-  $("statTotal").textContent = `${t.statsTotal} ${played}`;
-  $("statWins").textContent = `${t.statsWins} ${won}`;
-  $("statWinrate").textContent = `${t.statsWinrate} ${winrate}%`;
+  var t = I18N[settings.lang];
+  if (!DOM.lblStatsTitle) return;
+
+  DOM.lblStatsTitle.textContent = t.statsTitle;
+  var played  = settings.gamesPlayed || 0;
+  var won     = settings.gamesWon || 0;
+  var winrate = played > 0 ? Math.round((won / played) * 100) : 0;
+
+  DOM.statTotal.textContent   = t.statsTotal + " " + played;
+  DOM.statWins.textContent    = t.statsWins + " " + won;
+  DOM.statWinrate.textContent = t.statsWinrate + " " + winrate + "%";
 }
 
 function updateCareerUI() {
-  const t = I18N[settings.lang];
-  const lblTitle = $("lblCareerTitle");
-  const lblXp = $("lblCareerXp");
-  const fill = $("careerProgressFill");
-  if (!lblTitle || !lblXp || !fill) return;
+  var t = I18N[settings.lang];
+  if (!DOM.lblCareerTitle || !DOM.lblCareerXp || !DOM.careerProgressFill) return;
 
-  const lvl = settings.pveLevel || 1;
-  const xp = settings.pveXp || 0;
-  
-  lblTitle.textContent = `${t.careerTitle}: ${lvl}`;
-  lblXp.textContent = `${t.careerXp} ${xp}/100`;
-  fill.style.width = `${xp}%`;
+  var lvl = settings.pveLevel || 1;
+  var xp  = settings.pveXp || 0;
+
+  DOM.lblCareerTitle.textContent = t.careerTitle + ": " + lvl;
+  DOM.lblCareerXp.textContent = t.careerXp + " " + xp + "/100";
+  DOM.careerProgressFill.style.width = xp + "%";
 }
 
 /* ─────────────────────────────────────────────────────
-   UI RENDER
+   UI RENDER (batched top-level)
    ───────────────────────────────────────────────────── */
 function renderUI() {
-  const t = I18N[settings.lang];
+  var t = I18N[settings.lang];
 
-  // Update version in settings screen
-  if ($("gameVersion")) $("gameVersion").textContent = "v" + BUILD_VERSION;
+  if (DOM.gameVersion) DOM.gameVersion.textContent = "v" + BUILD_VERSION;
 
-  $("btnStart").innerHTML        = "▶ " + t.start;
-  const btnInfo = $("btnInfo");
-  if (btnInfo && t.btnAbout) btnInfo.textContent = t.btnAbout;
-  
-  $("tabHome").textContent       = t.home;
-  $("tabSettings").textContent   = t.settings;
-  $("settingsTitle").textContent = t.settings;
-  $("lblMode").textContent       = t.mode;
-  $("lblSize").textContent       = t.size;
-  $("lblGoal").textContent       = t.goal;
-  $("lblAI").textContent         = t.ai;
-  $("lblNames").textContent      = t.playersLabel;
+  DOM.btnStart.innerHTML = "\u25B6 " + t.start;
+  if (DOM.btnInfo && t.btnAbout) DOM.btnInfo.textContent = t.btnAbout;
 
+  DOM.tabHome.textContent       = t.home;
+  DOM.tabSettings.textContent   = t.settings;
+  DOM.settingsTitle.textContent = t.settings;
+  DOM.lblMode.textContent       = t.mode;
+  DOM.lblSize.textContent       = t.size;
+  DOM.lblGoal.textContent       = t.goal;
+  DOM.lblAI.textContent         = t.ai;
+  DOM.lblNames.textContent      = t.playersLabel;
+
+  if (DOM.lblMatchMod) DOM.lblMatchMod.textContent = t.lblMatchMod;
 
   updateStatsUI();
   updateCareerUI();
 
-  const flagMap = { "ru": "🇷🇺", "en": "🇺🇸", "uz": "🇺🇿" };
-  const langToggleBtn = $("btnLangToggle");
-  if (langToggleBtn) langToggleBtn.textContent = flagMap[settings.lang] || "🇷🇺";
+  var flagMap = { "ru": "\uD83C\uDDF7\uD83C\uDDFA", "en": "\uD83C\uDDFA\uD83C\uDDF8", "uz": "\uD83C\uDDFA\uD83C\uDDFF" };
+  if (DOM.btnLangToggle) DOM.btnLangToggle.textContent = flagMap[settings.lang] || "\uD83C\uDDF7\uD83C\uDDFA";
 
-  const themeIconMap = { "light": "☀️", "dark": "🌙", "gold": "👑" };
-  const themeToggleBtn = $("btnThemeToggle");
-  if (themeToggleBtn) themeToggleBtn.textContent = themeIconMap[settings.theme] || "☀️";
+  var themeIconMap = { "light": "\u2600\uFE0F", "dark": "\uD83C\uDF19", "gold": "\uD83D\uDC51" };
+  if (DOM.btnThemeToggle) DOM.btnThemeToggle.textContent = themeIconMap[settings.theme] || "\u2600\uFE0F";
 
-  const btnSoundToggle = $("btnSoundToggle");
-  if (btnSoundToggle) {
-    btnSoundToggle.textContent = settings.sound ? "🔊" : "🔇";
+  if (DOM.btnSoundToggle) {
+    DOM.btnSoundToggle.textContent = settings.sound ? "\uD83D\uDD0A" : "\uD83D\uDD07";
   }
 
-  const txtL = document.querySelector(".theme-txt-light");
+  var txtL = document.querySelector(".theme-txt-light");
   if (txtL) txtL.textContent = t.thLight;
-  const txtD = document.querySelector(".theme-txt-dark");
+  var txtD = document.querySelector(".theme-txt-dark");
   if (txtD) txtD.textContent = t.thDark;
-  const txtG = document.querySelector(".theme-txt-gold");
+  var txtG = document.querySelector(".theme-txt-gold");
   if (txtG) txtG.textContent = t.thGold;
 
-  $("inpP1").placeholder = t.p1;
-  $("inpP2").placeholder = t.p2;
-  $("inpP3").placeholder = t.p3;
-  $("inpP4").placeholder = t.p4;
+  DOM.inpP1.placeholder = t.p1;
+  DOM.inpP2.placeholder = t.p2;
+  DOM.inpP3.placeholder = t.p3;
+  DOM.inpP4.placeholder = t.p4;
 
-  $("btnSave").textContent = t.save;
-
-  $("btnExit").textContent    = t.exit;
-  $("btnUndo").innerHTML      = "↩ " + t.undo;
-  $("btnRestart").innerHTML   = "⟲ " + t.restart;
+  DOM.btnSave.textContent = t.save;
+  DOM.btnExit.textContent = t.exit;
+  DOM.btnUndo.innerHTML   = "\u21A9 " + t.undo;
+  DOM.btnRestart.innerHTML = "\u27F2 " + t.restart;
 
   renderHomeMeta();
 }
 
 /* ─────────────────────────────────────────────────────
-   THEME
+   THEME APPLICATION (with Gold revert guard)
    ───────────────────────────────────────────────────── */
 function applyTheme() {
-  // Guard: If Gold is selected but not unlocked, fall back to light
   if (settings.theme === "gold" && !isPremiumUnlocked("gold_theme_unlocked")) {
     settings.theme = "light";
     saveSettings(settings);
@@ -1848,188 +1925,190 @@ function applyTheme() {
    TOAST
    ───────────────────────────────────────────────────── */
 function showToast(msg) {
-  const el = $("toast");
-  el.textContent = msg;
-  el.classList.add("on");
-  setTimeout(() => el.classList.remove("on"), 2200);
+  DOM.toast.textContent = msg;
+  DOM.toast.classList.add("on");
+  setTimeout(function () { DOM.toast.classList.remove("on"); }, 2200);
 }
 
 /* ─────────────────────────────────────────────────────
    MODAL CONFIRM
    ───────────────────────────────────────────────────── */
 function modalConfirm(txt) {
-  return new Promise(resolve => {
-    const t = I18N[settings.lang];
-    $("modalTitle").textContent  = t.confirmTitle;
-    $("modalText").textContent   = txt;
-    $("modalCancel").textContent = t.cancel;
-    $("modalOk").textContent     = t.ok;
+  return new Promise(function (resolve) {
+    var t = I18N[settings.lang];
+    DOM.modalTitle.textContent  = t.confirmTitle;
+    DOM.modalText.textContent   = txt;
+    DOM.modalCancel.textContent = t.cancel;
+    DOM.modalOk.textContent     = t.ok;
+    DOM.modalCancel.style.display = "";
+    DOM.modalBack.classList.add("on");
 
-    $("modalBack").classList.add("on");
-
-    let resolved = false;
-    const guard = (val) => () => {
-      if (resolved) return;
-      resolved = true;
-      Sfx.click(settings.sound);
-      $("modalBack").classList.remove("on");
-      resolve(val);
-    };
-
-    $("modalOk").onclick = guard(true);
-    $("modalCancel").onclick = guard(false);
+    var resolved = false;
+    function guard(val) {
+      return function () {
+        if (resolved) return;
+        resolved = true;
+        Sfx.click(settings.sound);
+        DOM.modalBack.classList.remove("on");
+        resolve(val);
+      };
+    }
+    DOM.modalOk.onclick     = guard(true);
+    DOM.modalCancel.onclick = guard(false);
   });
 }
 
 /* ─────────────────────────────────────────────────────
-   SAVE GAME STATE
+   SAVE GAME STATE (deep-clone snapshot)
    ───────────────────────────────────────────────────── */
 function saveGameData() {
   saveGame({
     settingsSnapshot: JSON.parse(JSON.stringify(settings)),
-    board,
-    history,
-    gameOver
+    board: board,
+    history: history,
+    gameOver: gameOver
   });
 }
 
 /* ─────────────────────────────────────────────────────
-   NETWORK (P2P via PeerJS)
+   P2P NETWORK ENGINE (Robust WebRTC via PeerJS)
    ───────────────────────────────────────────────────── */
 function initP2PNetwork() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const room = urlParams.get('room');
+  var urlParams = new URLSearchParams(window.location.search);
+  var room = urlParams.get("room");
   if (!room) return;
-  
-  network.isHost = false;
+
+  network.isHost   = false;
   network.isActive = true;
-  network.roomID = room;
-  
-  $("netModal").classList.remove("hidden");
-  $("netStatusTitle").textContent = "Подключение...";
-  $("netStatusDesc").textContent = "Ищем создателя игры...";
-  $("btnCopyNetLink").style.display = "none";
-  
+  network.roomID   = room;
+
+  DOM.netModal.classList.remove("hidden");
+  DOM.netStatusTitle.textContent = "\u041F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435...";
+  DOM.netStatusDesc.textContent  = "\u0418\u0449\u0435\u043C \u0441\u043E\u0437\u0434\u0430\u0442\u0435\u043B\u044F \u0438\u0433\u0440\u044B...";
+  DOM.btnCopyNetLink.style.display = "none";
+
   network.peer = new Peer();
-  
-  network.peer.on('open', (id) => {
-    // ГОСТЬ ИНИЦИИРУЕТ СОЕДИНЕНИЕ
-    const outgoingConn = network.peer.connect(room, { reliable: true });
+
+  network.peer.on("open", function () {
+    var outgoingConn = network.peer.connect(room, { reliable: true });
     network.conn = outgoingConn;
     setupConnection(network.conn);
   });
-  
-  network.peer.on('error', (err) => {
-    $("netStatusTitle").textContent = "Ошибка сети";
-    $("netStatusDesc").textContent = (err.type === "peer-unavailable") ? "Комната не найдена или хост отключился." : "Ошибка: " + err.message;
-    $("btnCancelNet").textContent = "Закрыть";
+
+  network.peer.on("error", function (err) {
+    DOM.netStatusTitle.textContent = "\u041E\u0448\u0438\u0431\u043A\u0430 \u0441\u0435\u0442\u0438";
+    DOM.netStatusDesc.textContent = (err.type === "peer-unavailable")
+      ? "\u041A\u043E\u043C\u043D\u0430\u0442\u0430 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430 \u0438\u043B\u0438 \u0445\u043E\u0441\u0442 \u043E\u0442\u043A\u043B\u044E\u0447\u0438\u043B\u0441\u044F."
+      : "\u041E\u0448\u0438\u0431\u043A\u0430: " + err.message;
+    DOM.btnCancelNet.textContent = "\u0417\u0430\u043A\u0440\u044B\u0442\u044C";
   });
 }
 
 function startNetworkHost() {
-  network.isHost = true;
+  network.isHost   = true;
   network.isActive = true;
-  
-  $("netModal").classList.remove("hidden");
-  $("netStatusTitle").textContent = "Создание комнаты...";
-  $("netStatusDesc").textContent = "Генерируем P2P ссылку...";
-  $("btnCopyNetLink").style.display = "none";
-  $("btnCancelNet").textContent = "Отмена";
-  
+
+  DOM.netModal.classList.remove("hidden");
+  DOM.netStatusTitle.textContent = "\u0421\u043E\u0437\u0434\u0430\u043D\u0438\u0435 \u043A\u043E\u043C\u043D\u0430\u0442\u044B...";
+  DOM.netStatusDesc.textContent  = "\u0413\u0435\u043D\u0435\u0440\u0438\u0440\u0443\u0435\u043C P2P \u0441\u0441\u044B\u043B\u043A\u0443...";
+  DOM.btnCopyNetLink.style.display = "none";
+  DOM.btnCancelNet.textContent = "\u041E\u0442\u043C\u0435\u043D\u0430";
+
   if (!network.peer || network.peer.destroyed) {
     network.peer = new Peer();
   }
-  
-  network.peer.on('open', (id) => {
+
+  network.peer.on("open", function (id) {
     network.roomID = id;
-    $("netStatusDesc").textContent = "Ожидаем подключения второго игрока...";
-    $("btnCopyNetLink").style.display = "block";
+    DOM.netStatusDesc.textContent = "\u041E\u0436\u0438\u0434\u0430\u0435\u043C \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u0432\u0442\u043E\u0440\u043E\u0433\u043E \u0438\u0433\u0440\u043E\u043A\u0430...";
+    DOM.btnCopyNetLink.style.display = "block";
   });
-  
-  if (network.peer) network.peer.removeAllListeners('connection');
-  network.peer.on('connection', (incomingConn) => {
-    // ЖЕСТКАЯ ФИКСАЦИЯ КАНАЛА ДЛЯ ХОСТА
+
+  // Prevent callback accumulation
+  if (network.peer) network.peer.removeAllListeners("connection");
+  network.peer.on("connection", function (incomingConn) {
     network.conn = incomingConn;
     setupConnection(network.conn);
   });
-  
-  network.peer.on('error', (err) => {
-    $("netStatusTitle").textContent = "Ошибка сети";
-    $("netStatusDesc").textContent = "Ошибка: " + err.message;
-    $("btnCopyNetLink").style.display = "none";
+
+  network.peer.on("error", function (err) {
+    DOM.netStatusTitle.textContent = "\u041E\u0448\u0438\u0431\u043A\u0430 \u0441\u0435\u0442\u0438";
+    DOM.netStatusDesc.textContent = "\u041E\u0448\u0438\u0431\u043A\u0430: " + err.message;
+    DOM.btnCopyNetLink.style.display = "none";
   });
 }
 
 function setupConnection(conn) {
-  conn.on('open', () => {
-    $("netModal").classList.add("hidden");
-    showToast(network.isHost ? "Игрок подключился! Начинаем..." : "Успешно подключено к хосту!");
-    
-    settings.mode = "pvp"; // Переключаем в PvP режим
-    
+  conn.on("open", function () {
+    DOM.netModal.classList.add("hidden");
+    showToast(network.isHost
+      ? "\u0418\u0433\u0440\u043E\u043A \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u043B\u0441\u044F! \u041D\u0430\u0447\u0438\u043D\u0430\u0435\u043C..."
+      : "\u0423\u0441\u043F\u0435\u0448\u043D\u043E \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u043E \u043A \u0445\u043E\u0441\u0442\u0443!");
+
+    settings.mode = "pvp";
+
     if (network.isHost) {
-      // Хост мгновенно отправляет свои настройки гостю
-      setTimeout(() => {
+      // Host Configuration Broadcasting
+      setTimeout(function () {
         if (network.conn && network.conn.open) {
-          const pkt = {
+          var pkt = {
             type: "START_CONFIG",
-            settings: settings,
-            superDecks: superMode.playerDecks
+            settings: JSON.parse(JSON.stringify(settings)),
+            superDecks: JSON.parse(JSON.stringify(superMode.playerDecks))
           };
-          pushNetLog('OUT', pkt);
+          pushNetLog("OUT", pkt);
           network.conn.send(pkt);
         }
       }, 500);
+
       if (settings.matchMode === "super") {
-        $("screenHome").classList.add("hidden");
-        $("screenDraft").classList.remove("hidden");
+        DOM.screenHome.classList.add("hidden");
+        DOM.screenDraft.classList.remove("hidden");
         startDraftPhase();
       } else {
         startNewGame();
       }
     }
   });
-  
-  conn.removeAllListeners('data');
-  conn.on('data', (data) => {
-    pushNetLog('IN', data);
+
+  // Prevent callback accumulation
+  conn.removeAllListeners("data");
+  conn.on("data", function (data) {
+    pushNetLog("IN", data);
     handleNetworkData(data);
   });
-  
-  conn.on('close', () => {
-    showToast("Соперник отключился");
+
+  conn.on("close", function () {
+    showToast("\u0421\u043E\u043F\u0435\u0440\u043D\u0438\u043A \u043E\u0442\u043A\u043B\u044E\u0447\u0438\u043B\u0441\u044F");
     network.isActive = false;
-    board = []; gameOver = false;
+    board = [];
+    gameOver = false;
     saveGameData();
     go("home");
   });
 }
 
 function handleNetworkData(data) {
-  console.log("Received data:", data);
   if (!data || !data.type) return;
 
   if (data.type === "START_CONFIG") {
-    console.log("Синхронизация настроек от хоста...", data.settings);
-    settings.size = data.settings.size;
-    settings.goal = data.settings.goal;
+    // Guest dynamically re-initializes layout based on Host config
+    settings.size      = data.settings.size;
+    settings.goal      = data.settings.goal;
     settings.matchMode = data.settings.matchMode;
-    settings.mode = "pvp";
+    settings.mode      = "pvp";
 
-    // Не перезаписываем decks если они уже инициализированы локально
-  // Это предотвращает потерю локального состояния драфта
-  if (data.superDecks && !superMode.playerDecks[0]) {
-    superMode.playerDecks = data.superDecks;
-  }
+    if (data.superDecks && !superMode.playerDecks[0]) {
+      superMode.playerDecks = JSON.parse(JSON.stringify(data.superDecks));
+    }
 
     saveSettings(settings);
     syncSettingsForm();
-    
-    // If super mode, open draft screen instead of jumping to game
+
     if (settings.matchMode === "super") {
-      $("screenHome").classList.add("hidden");
-      $("screenSettings").classList.add("hidden");
-      $("screenDraft").classList.remove("hidden");
+      DOM.screenHome.classList.add("hidden");
+      DOM.screenSettings.classList.add("hidden");
+      DOM.screenDraft.classList.remove("hidden");
       startDraftPhase();
     } else {
       startNewGame();
@@ -2038,72 +2117,70 @@ function handleNetworkData(data) {
   }
 
   if (data.type === "MOVE") {
-    // Применяем ход соперника локально
     if (typeof data.abilityId !== "undefined" && data.abilityId !== null) {
-      // Если соперник использовал способность, активируем её у него
       superMode.activeAbility = data.abilityId;
     }
-    // Вызываем стандартную функцию клика по клетке для соперника
-    executeCellClick(data.cellIndex, false); 
-    renderGame(); // Жесткий форсированный рендер доски
+    executeCellClick(data.cellIndex, false);
+    renderGame();
   }
 
   if (data.type === "DRAFT_SELECT") {
-    // Синхронизация выбора карт на экране драфта
-    const pIdx = data.playerIdx;
-    if (!superMode.playerDecks[pIdx].includes(data.abilityId)) {
+    var pIdx = data.playerIdx;
+    superMode.playerDecks[pIdx] = superMode.playerDecks[pIdx] || [];
+    if (superMode.playerDecks[pIdx].indexOf(data.abilityId) === -1) {
       superMode.playerDecks[pIdx].push(data.abilityId);
-      // draftTurnIndex инкрементируется только на стороне инициатора выбора
       renderDraftGrid();
     }
   }
 
   if (data.type === "PLAYER_READY") {
-    console.log("Соперник готов, его колода:", data.deck);
     superMode.playerDecks[data.playerIdx] = data.deck;
-    renderDraftGrid(); // Перерисовываем, чтобы сработал триггер старта игры
+    renderDraftGrid();
     return;
   }
 }
 
 /* ─────────────────────────────────────────────────────
-   ADMIN PANEL MONITOR
+   ADMIN PANEL — TELEMETRY MONITOR
    ───────────────────────────────────────────────────── */
 function refreshAdminMonitor() {
-  const monEl = $("adminNetMonitor");
-  if (!monEl) return;
+  if (!DOM.adminNetMonitor) return;
 
-  const peerStatus = network.peer ? (network.peer.destroyed ? "destroyed" : (network.peer.disconnected ? "disconnected" : "alive")) : "null";
-  const connStatus = network.conn ? (network.conn.open ? "open" : "closed") : "null";
+  var peerStatus = network.peer
+    ? (network.peer.destroyed ? "destroyed" : (network.peer.disconnected ? "disconnected" : "alive"))
+    : "null";
+  var connStatus = network.conn
+    ? (network.conn.open ? "open" : "closed")
+    : "null";
 
-  let html = `<div style="font-size:12px; font-family:monospace; color:var(--text); text-align:left;">`;
-  html += `<b>Room ID:</b> ${network.roomID || "—"}<br>`;
-  html += `<b>Role:</b> ${network.isActive ? (network.isHost ? "HOST" : "GUEST") : "OFFLINE"}<br>`;
-  html += `<b>Peer:</b> ${peerStatus}<br>`;
-  html += `<b>Conn:</b> ${connStatus}<br>`;
-  html += `<hr style="border-color:rgba(255,255,255,0.1); margin:6px 0;">`;
-  html += `<b>Last ${Math.min(networkLog.length, 10)} packets:</b><br>`;
+  var html = '<div style="font-size:12px;font-family:monospace;color:var(--text);text-align:left;">';
+  html += '<b>Room ID:</b> ' + (network.roomID || "\u2014") + '<br>';
+  html += '<b>Role:</b> ' + (network.isActive ? (network.isHost ? "HOST" : "GUEST") : "OFFLINE") + '<br>';
+  html += '<b>Peer:</b> ' + peerStatus + '<br>';
+  html += '<b>Conn:</b> ' + connStatus + '<br>';
+  html += '<hr style="border-color:rgba(255,255,255,0.1);margin:6px 0;">';
+  html += '<b>Last ' + Math.min(networkLog.length, 10) + ' packets:</b><br>';
 
-  const recent = networkLog.slice(-10).reverse();
+  var recent = networkLog.slice(-10).reverse();
   if (recent.length === 0) {
-    html += `<i style="opacity:0.5;">No packets yet</i>`;
+    html += '<i style="opacity:0.5;">No packets yet</i>';
   } else {
-    recent.forEach(entry => {
-      const dir = entry.dir === "IN" ? "📥" : "📤";
-      const type = entry.data?.type || "?";
-      const time = new Date(entry.ts).toLocaleTimeString();
-      html += `${dir} <b>${type}</b> @ ${time}<br>`;
+    recent.forEach(function (entry) {
+      var dir  = entry.dir === "IN" ? "\uD83D\uDCE5" : "\uD83D\uDCE4";
+      var type = (entry.data && entry.data.type) ? entry.data.type : "?";
+      var time = new Date(entry.ts).toLocaleTimeString();
+      html += dir + ' <b>' + type + '</b> @ ' + time + '<br>';
     });
   }
-  html += `</div>`;
-  monEl.innerHTML = html;
+  html += '</div>';
+  DOM.adminNetMonitor.innerHTML = html;
 }
 
 /* ─────────────────────────────────────────────────────
    BOOTSTRAP — single DOMContentLoaded guard
    ───────────────────────────────────────────────────── */
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
 } else {
   init();
 }
